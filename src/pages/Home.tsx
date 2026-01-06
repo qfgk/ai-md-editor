@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 import emptyStateIcon from "@/assets/empty-state.png";
 
 const STORAGE_KEY = "md-editor-content";
-const DEFAULT_MARKDOWN = `# 欢迎使用 MD 编辑器
+const DEFAULT_MARKDOWN = `# 欢迎使用 AI Markdown 编辑器
 
 在左侧输入 Markdown 内容，右侧将实时显示预览效果。
 
@@ -45,6 +45,8 @@ const DEFAULT_MARKDOWN = `# 欢迎使用 MD 编辑器
 - **语法高亮**：支持多种编程语言代码块
 - **深色模式**：点击右上角图标一键切换
 - **文件管理**：支持打开本地文件夹、导入导出
+- **多格式导出**：PDF、PNG、DOCX
+- **云存储同步**：支持 5 种云存储方式
 
 \`\`\`javascript
 // 代码高亮示例
@@ -59,6 +61,25 @@ const sum = (a, b) => a + b;
 | Markdown | ✅ |
 | Mermaid 图表 | ✅ |
 | LaTeX 公式 | ✅ |
+
+## Mermaid 流程图示例
+
+\`\`\`mermaid
+graph TD
+    A[开始] --> B{是否工作?}
+    B -- 是 --> C[太棒了!]
+    B -- 否 --> D[调试]
+    D --> B
+\`\`\`
+
+## 数学公式示例
+
+行内公式：$E = mc^2$
+
+块级公式：
+$$
+\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}
+$$
 `;
 
 export default function Home() {
