@@ -17,12 +17,6 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { MultiCloudStorageDialog } from "@/components/MultiCloudStorageDialog";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Moon,
   Sun,
   PanelLeft,
@@ -35,9 +29,8 @@ import {
   FileDown,
   Image as ImageIcon,
   File,
-  ChevronDown,
 } from "lucide-react";
-import { exportToPDF, exportToPDFWithPrint, exportToPNG, exportToDOCX } from "@/lib/export";
+import { exportToPDFWithPrint, exportToPNG, exportToDOCX } from "@/lib/export";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
 import emptyStateIcon from "@/assets/empty-state.png";
@@ -287,21 +280,10 @@ export default function Home() {
   };
 
   const handleExportPDF = async () => {
-    if (!previewRef.current) return;
-    try {
-      const filename = `document-${new Date().toISOString().slice(0, 10)}.pdf`;
-      await exportToPDF(previewRef.current, filename);
-      toast.success("PDF 导出成功");
-    } catch (error: any) {
-      toast.error(error.message || "PDF 导出失败");
-    }
-  };
-
-  const handleExportPDFHighQuality = async () => {
     try {
       const filename = `document-${new Date().toISOString().slice(0, 10)}.pdf`;
       exportToPDFWithPrint(markdown, filename);
-      toast.info("请在打印对话框中选择 \"另存为 PDF\"");
+      toast.info("正在打开打印对话框，请选择 \"另存为 PDF\"");
     } catch (error: any) {
       toast.error(error.message || "PDF 导出失败");
     }
@@ -446,36 +428,17 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Export Dropdown */}
+          {/* Export Buttons */}
           <div className="hidden md:flex items-center gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-muted-foreground hover:text-foreground"
-                  title="导出为 PDF"
-                >
-                  <FileDown size={16} /> PDF <ChevronDown size={12} />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExportPDF}>
-                  <FileDown size={16} className="mr-2" />
-                  <div>
-                    <div className="font-medium">快速导出</div>
-                    <div className="text-xs text-muted-foreground">直接下载（可能有分页问题）</div>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportPDFHighQuality}>
-                  <FileDown size={16} className="mr-2" />
-                  <div>
-                    <div className="font-medium">高质量导出</div>
-                    <div className="text-xs text-muted-foreground">智能分页（需在打印对话框中保存）</div>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleExportPDF}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+              title="导出为 PDF"
+            >
+              <FileDown size={16} /> PDF
+            </Button>
             <Button
               variant="ghost"
               size="sm"
