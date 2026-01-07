@@ -33,6 +33,20 @@ export interface CloudFileInfo {
 }
 
 /**
+ * 配置字段定义
+ */
+export interface ConfigField {
+  name: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  type?: 'text' | 'password' | 'select';
+  options?: Array<{ label: string; value: string }>;
+  defaultValue?: string;
+  validate?: (value: string) => string | null;
+}
+
+/**
  * 统一的云存储接口
  */
 export interface ICloudStorage {

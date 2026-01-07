@@ -11,12 +11,70 @@ export async function exportToPNG(
   filename: string = 'document.png'
 ): Promise<void> {
   try {
-    const canvas = await html2canvas(element, {
+    // Create a wrapper with fixed width for consistent export
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'absolute';
+    wrapper.style.left = '-9999px';
+    wrapper.style.width = '1200px'; // Fixed width for consistent exports
+    wrapper.style.minHeight = 'auto';
+    wrapper.style.height = 'auto';
+    wrapper.style.background = '#ffffff';
+    wrapper.style.padding = '40px';
+    wrapper.style.overflow = 'visible';
+    wrapper.className = element.className;
+    wrapper.innerHTML = element.innerHTML;
+
+    document.body.appendChild(wrapper);
+
+    // Force layout recalculation to get full height
+    wrapper.style.height = wrapper.scrollHeight + 'px';
+
+    const canvas = await html2canvas(wrapper, {
       backgroundColor: '#ffffff',
-      scale: 2, // Higher scale for better quality
+      scale: 1, // Normal resolution
       logging: false,
       useCORS: true,
+      ignoreElements: (element) => false,
+      windowWidth: 1200,
+      windowHeight: wrapper.scrollHeight,
+      onclone: (clonedDoc) => {
+        const root = clonedDoc.documentElement;
+        root.style.setProperty('color-scheme', 'light');
+
+        const style = clonedDoc.createElement('style');
+        style.textContent = `
+          * {
+            color: #000000 !important;
+            background-color: transparent !important;
+            border-color: #e5e7eb !important;
+          }
+          body, div, span, p, h1, h2, h3, h4, h5, h6, ul, ol, li, blockquote, pre, code {
+            color: #000000 !important;
+          }
+          a {
+            color: #2563eb !important;
+          }
+          code, pre {
+            background-color: #f3f4f6 !important;
+            border: 1px solid #e5e7eb !important;
+          }
+          blockquote {
+            border-color: #2563eb !important;
+            color: #6b7280 !important;
+          }
+          table {
+            border-color: #e5e7eb !important;
+          }
+          th, td {
+            border-color: #e5e7eb !important;
+            color: #000000 !important;
+          }
+        `;
+        clonedDoc.head.appendChild(style);
+      }
     });
+
+    document.body.removeChild(wrapper);
 
     canvas.toBlob((blob) => {
       if (blob) {
@@ -37,6 +95,185 @@ export async function exportToPNG(
 }
 
 /**
+ * Export content as PDF using browser print (Typora-quality)
+ * This provides the best pagination and formatting
+ */
+export function exportToPDFWithPrint(markdown: string, filename: string = 'document.pdf'): void {
+  try {
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      throw new Error('无法打开打印窗口，请检查浏览器弹窗设置');
+    }
+
+    // Convert markdown to HTML
+    const htmlContent = marked(markdown);
+
+    // Write the print document with proper styling
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>${filename.replace('.pdf', '')}</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            font-size: 12pt;
+            line-height: 1.6;
+            color: #000000;
+            background: #ffffff;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20mm;
+          }
+
+          h1, h2, h3, h4, h5, h6 {
+            font-weight: 600;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            page-break-after: avoid;
+          }
+
+          h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
+          h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.2em; }
+          h3 { font-size: 1.25em; }
+          h4 { font-size: 1em; }
+          h5 { font-size: 0.875em; }
+          h6 { font-size: 0.75em; }
+
+          p {
+            margin-bottom: 1em;
+            orphans: 3;
+            widows: 3;
+          }
+
+          a {
+            color: #2563eb;
+            text-decoration: none;
+          }
+
+          code {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f3f4f6;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+          }
+
+          pre {
+            background-color: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            padding: 1em;
+            overflow-x: auto;
+            page-break-inside: avoid;
+            margin-bottom: 1em;
+          }
+
+          pre code {
+            background-color: transparent;
+            padding: 0;
+            border: none;
+            font-size: 0.9em;
+          }
+
+          blockquote {
+            border-left: 4px solid #2563eb;
+            padding-left: 1em;
+            margin-left: 0;
+            margin-right: 0;
+            color: #6b7280;
+            font-style: italic;
+            page-break-inside: avoid;
+          }
+
+          ul, ol {
+            margin-left: 2em;
+            margin-bottom: 1em;
+          }
+
+          li {
+            margin-bottom: 0.5em;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1em;
+            page-break-inside: avoid;
+          }
+
+          th, td {
+            border: 1px solid #e5e7eb;
+            padding: 0.5em;
+            text-align: left;
+          }
+
+          th {
+            background-color: #f9fafb;
+            font-weight: 600;
+          }
+
+          hr {
+            border: none;
+            border-top: 1px solid #e5e7eb;
+            margin: 2em 0;
+            page-break-after: always;
+          }
+
+          img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1em auto;
+            page-break-inside: avoid;
+          }
+
+          /* Avoid page breaks inside these elements */
+          h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, table, li {
+            break-inside: avoid;
+          }
+
+          @media print {
+            body {
+              padding: 0;
+            }
+            .no-print {
+              display: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${htmlContent}
+        <script>
+          // Trigger print dialog when page loads
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+              window.close();
+            }, 250);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+  } catch (error) {
+    console.error('PDF export failed:', error);
+    throw new Error('PDF 导出失败');
+  }
+}
+
+/**
  * Export content as PDF
  */
 export async function exportToPDF(
@@ -44,14 +281,86 @@ export async function exportToPDF(
   filename: string = 'document.pdf'
 ): Promise<void> {
   try {
-    const canvas = await html2canvas(element, {
+    // Create a wrapper with fixed width for consistent exports
+    const A4_WIDTH_MM = 210;
+    const MM_TO_PX = 3.7795;
+    const A4_WIDTH_PX = Math.round(A4_WIDTH_MM * MM_TO_PX);
+
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'absolute';
+    wrapper.style.left = '-9999px';
+    wrapper.style.width = `${A4_WIDTH_PX}px`;
+    wrapper.style.minHeight = 'auto';
+    wrapper.style.height = 'auto';
+    wrapper.style.background = '#ffffff';
+    wrapper.style.padding = '40px';
+    wrapper.style.fontSize = '16px';
+    wrapper.style.lineHeight = '1.6';
+    wrapper.style.overflow = 'visible';
+    wrapper.className = element.className;
+    wrapper.innerHTML = element.innerHTML;
+
+    document.body.appendChild(wrapper);
+    wrapper.style.height = wrapper.scrollHeight + 'px';
+
+    const canvas = await html2canvas(wrapper, {
       backgroundColor: '#ffffff',
-      scale: 2,
+      scale: 1,
       logging: false,
       useCORS: true,
+      ignoreElements: (element) => false,
+      windowWidth: A4_WIDTH_PX,
+      windowHeight: wrapper.scrollHeight,
+      onclone: (clonedDoc) => {
+        const root = clonedDoc.documentElement;
+        root.style.setProperty('color-scheme', 'light');
+
+        const style = clonedDoc.createElement('style');
+        style.textContent = `
+          * {
+            color: #000000 !important;
+            background-color: transparent !important;
+            border-color: #e5e7eb !important;
+          }
+          body, div, span, p, h1, h2, h3, h4, h5, h6, ul, ol, li, blockquote, pre, code {
+            color: #000000 !important;
+          }
+          a {
+            color: #2563eb !important;
+          }
+          code, pre {
+            background-color: #f3f4f6 !important;
+            border: 1px solid #e5e7eb !important;
+          }
+          blockquote {
+            border-color: #2563eb !important;
+            color: #6b7280 !important;
+          }
+          table {
+            border-color: #e5e7eb !important;
+          }
+          th, td {
+            border-color: #e5e7eb !important;
+            color: #000000 !important;
+          }
+          /* Avoid breaking inside these elements */
+          h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, table, li {
+            break-inside: avoid !important;
+          }
+          pre, code {
+            white-space: pre-wrap !important;
+            word-break: break-word !important;
+          }
+        `;
+        clonedDoc.head.appendChild(style);
+      }
     });
 
+    document.body.removeChild(wrapper);
+
+    // Convert canvas to image data
     const imgData = canvas.toDataURL('image/png');
+
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -60,22 +369,21 @@ export async function exportToPDF(
 
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
+
     const imgWidth = pageWidth;
     const imgHeight = (canvas.height * pageWidth) / canvas.width;
 
-    let heightLeft = imgHeight;
-    let position = 0;
+    // Calculate total pages needed
+    const totalPages = Math.ceil(imgHeight / pageHeight);
 
-    // Add first page
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+    for (let i = 0; i < totalPages; i++) {
+      if (i > 0) {
+        pdf.addPage();
+      }
 
-    // Add additional pages if content is longer than one page
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      // Calculate Y position to show the correct portion of the image
+      const yPosition = -(i * pageHeight);
+      pdf.addImage(imgData, 'PNG', 0, yPosition, imgWidth, imgHeight);
     }
 
     pdf.save(filename);

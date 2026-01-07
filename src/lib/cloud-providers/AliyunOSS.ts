@@ -5,10 +5,12 @@ export class AliyunOSSStorage implements ICloudStorage {
   private client: OSS | null = null;
   private bucket: string;
   private region: string;
+  private path: string;
 
-  constructor(config: { region: string; bucket: string; accessKeyId: string; accessKeySecret: string }) {
+  constructor(config: { region: string; bucket: string; accessKeyId: string; accessKeySecret: string; path?: string }) {
     this.bucket = config.bucket;
     this.region = config.region;
+    this.path = config.path || '';
 
     try {
       this.client = new OSS({
@@ -28,7 +30,9 @@ export class AliyunOSSStorage implements ICloudStorage {
     if (!this.client) throw new Error('OSS 客户端未初始化');
 
     try {
-      const fileName = `${Date.now()}-${file.name}`;
+      // 使用配置的路径前缀
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const fileName = `${pathPrefix}${Date.now()}-${file.name}`;
       const result = await this.client.put(fileName, new Buffer(file.content));
 
       return {
@@ -60,15 +64,28 @@ export class AliyunOSSStorage implements ICloudStorage {
     if (!this.client) throw new Error('OSS 客户端未初始化');
 
     try {
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
       const result = await this.client.list({
         'max-keys': 100,
+        'prefix': pathPrefix || undefined,
       });
 
       if (!result.objects) return [];
 
-      return result.objects.map((obj) => ({
+      // 过滤出当前路径下的文件（不包括子目录）
+      const filteredObjects = result.objects.filter((obj) => {
+        // 如果有路径前缀，只返回该路径下的文件
+        if (pathPrefix) {
+          const relativePath = obj.name.substring(pathPrefix.length);
+          // 不包含子路径的文件
+          return !relativePath.includes('/');
+        }
+        return true;
+      });
+
+      return filteredObjects.map((obj) => ({
         id: obj.name,
-        name: obj.name,
+        name: obj.name.split('/').pop() || obj.name,
         lastModified: obj.lastModified,
         size: obj.size,
       }));

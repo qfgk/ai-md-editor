@@ -5,10 +5,12 @@ export class AWSS3Storage implements ICloudStorage {
   private client: S3Client | null = null;
   private bucket: string;
   private region: string;
+  private path: string;
 
-  constructor(config: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string }) {
+  constructor(config: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string; path?: string }) {
     this.bucket = config.bucket;
     this.region = config.region;
+    this.path = config.path || '';
 
     try {
       this.client = new S3Client({
@@ -28,7 +30,8 @@ export class AWSS3Storage implements ICloudStorage {
     if (!this.client) throw new Error('S3 客户端未初始化');
 
     try {
-      const fileName = `${Date.now()}-${file.name}`;
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const fileName = `${pathPrefix}${Date.now()}-${file.name}`;
       const command = new PutObjectCommand({
         Bucket: this.bucket,
         Key: fileName,
@@ -83,8 +86,10 @@ export class AWSS3Storage implements ICloudStorage {
     if (!this.client) throw new Error('S3 客户端未初始化');
 
     try {
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
       const command = new ListObjectsV2Command({
         Bucket: this.bucket,
+        Prefix: pathPrefix || undefined,
         MaxKeys: 100,
       });
 
@@ -92,12 +97,25 @@ export class AWSS3Storage implements ICloudStorage {
 
       if (!response.Contents) return [];
 
-      return response.Contents.map((obj) => ({
+      let files = response.Contents.map((obj) => ({
         id: obj.Key!,
         name: obj.Key!,
         lastModified: obj.LastModified?.toISOString() || new Date().toISOString(),
         size: obj.Size || 0,
       }));
+
+      // 过滤出当前路径下的文件（不包括子目录）
+      if (pathPrefix) {
+        files = files.filter((obj) => {
+          const relativePath = obj.id.substring(pathPrefix.length);
+          return !relativePath.includes('/');
+        }).map((obj) => ({
+          ...obj,
+          name: obj.id.split('/').pop() || obj.id,
+        }));
+      }
+
+      return files;
     } catch (error: any) {
       console.error('AWS S3 list files failed:', error);
       throw new Error(`列出文件失败: ${error.message || '未知错误'}`);

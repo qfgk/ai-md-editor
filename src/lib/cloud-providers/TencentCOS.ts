@@ -5,10 +5,12 @@ export class TencentCOSStorage implements ICloudStorage {
   private client: COS | null = null;
   private bucket: string;
   private region: string;
+  private path: string;
 
-  constructor(config: { bucket: string; region: string; secretId: string; secretKey: string }) {
+  constructor(config: { bucket: string; region: string; secretId: string; secretKey: string; path?: string }) {
     this.bucket = config.bucket;
     this.region = config.region;
+    this.path = config.path || '';
 
     try {
       this.client = new COS({
@@ -25,7 +27,8 @@ export class TencentCOSStorage implements ICloudStorage {
     if (!this.client) throw new Error('COS 客户端未初始化');
 
     return new Promise((resolve, reject) => {
-      const fileName = `${Date.now()}-${file.name}`;
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const fileName = `${pathPrefix}${Date.now()}-${file.name}`;
 
       this.client!.putObject(
         {
@@ -78,11 +81,12 @@ export class TencentCOSStorage implements ICloudStorage {
     if (!this.client) throw new Error('COS 客户端未初始化');
 
     return new Promise((resolve, reject) => {
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
       this.client!.getBucket(
         {
           Bucket: this.bucket,
           Region: this.region,
-          Prefix: '',
+          Prefix: pathPrefix || undefined,
           MaxKeys: 100,
         },
         (err: any, data: any) => {
@@ -90,12 +94,24 @@ export class TencentCOSStorage implements ICloudStorage {
             console.error('Tencent COS list files failed:', err);
             reject(new Error(`列出文件失败: ${err.message || '未知错误'}`));
           } else {
-            const files = (data.Contents || []).map((item: any) => ({
+            let files = (data.Contents || []).map((item: any) => ({
               id: item.Key,
               name: item.Key,
               lastModified: item.LastModified,
               size: item.Size,
             }));
+
+            // 过滤出当前路径下的文件（不包括子目录）
+            if (pathPrefix) {
+              files = files.filter((item: any) => {
+                const relativePath = item.id.substring(pathPrefix.length);
+                return !relativePath.includes('/');
+              }).map((item: any) => ({
+                ...item,
+                name: item.id.split('/').pop() || item.id,
+              }));
+            }
+
             resolve(files);
           }
         }

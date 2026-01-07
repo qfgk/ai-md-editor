@@ -1,4 +1,4 @@
-import { CloudProvider, type CloudStorageConfig, type ICloudStorage } from './types';
+import { CloudProvider, type CloudStorageConfig, type ICloudStorage, type ConfigField } from './types';
 import { AliyunOSSStorage } from './AliyunOSS';
 import { TencentCOSStorage } from './TencentCOS';
 import { AWSS3Storage } from './AWSS3';
@@ -68,6 +68,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         bucket: credentials.bucket,
         accessKeyId: credentials.accessKeyId,
         accessKeySecret: credentials.accessKeySecret,
+        path: credentials.path || '',
       });
 
     case CloudProvider.TENCENT_COS:
@@ -76,6 +77,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         bucket: credentials.bucket,
         secretId: credentials.secretId,
         secretKey: credentials.secretKey,
+        path: credentials.path || '',
       });
 
     case CloudProvider.AWS_S3:
@@ -84,6 +86,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         bucket: credentials.bucket,
         accessKeyId: credentials.accessKeyId,
         secretAccessKey: credentials.secretAccessKey,
+        path: credentials.path || '',
       });
 
     case CloudProvider.MINIO:
@@ -94,6 +97,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         bucket: credentials.bucket,
         accessKey: credentials.accessKey,
         secretKey: credentials.secretKey,
+        path: credentials.path || '',
       });
 
     default:
@@ -104,16 +108,68 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
 /**
  * 云存储提供商信息
  */
-export const PROVIDER_INFO = {
+export const PROVIDER_INFO: Record<CloudProvider, {
+  name: string;
+  icon: string;
+  description: string;
+  fields: ConfigField[];
+  helpUrl: string;
+}> = {
   [CloudProvider.ALIYUN_OSS]: {
     name: '阿里云 OSS',
     icon: '🟠',
     description: '阿里云对象存储服务',
     fields: [
-      { name: 'region', label: '区域', placeholder: 'oss-cn-hangzhou', required: true },
-      { name: 'bucket', label: 'Bucket 名称', placeholder: 'my-bucket', required: true },
-      { name: 'accessKeyId', label: 'AccessKey ID', placeholder: 'LTAI5t...', required: true },
-      { name: 'accessKeySecret', label: 'AccessKey Secret', placeholder: '...', required: true, type: 'password' },
+      {
+        name: 'region',
+        label: '区域',
+        placeholder: 'oss-cn-hangzhou',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入区域';
+          if (!value.startsWith('oss-')) return '区域格式错误，应为 oss-cn-xxx';
+          return null;
+        }
+      },
+      {
+        name: 'bucket',
+        label: 'Bucket 名称',
+        placeholder: 'my-bucket',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入 Bucket 名称';
+          if (value.length < 3 || value.length > 63) return 'Bucket 名称长度应为 3-63 个字符';
+          if (!/^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$/.test(value)) return 'Bucket 名称只能包含小写字母、数字和连字符';
+          return null;
+        }
+      },
+      {
+        name: 'accessKeyId',
+        label: 'AccessKey ID',
+        placeholder: 'LTAI5t...',
+        required: true,
+        validate: (value) => !value ? '请输入 AccessKey ID' : null
+      },
+      {
+        name: 'accessKeySecret',
+        label: 'AccessKey Secret',
+        placeholder: '••••••••',
+        required: true,
+        type: 'password',
+        validate: (value) => !value ? '请输入 AccessKey Secret' : null
+      },
+      {
+        name: 'path',
+        label: '上传路径',
+        placeholder: 'docs/（可选，留空为根目录）',
+        required: false,
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
     ],
     helpUrl: 'https://help.aliyun.com/product/31815.html',
   },
@@ -122,10 +178,55 @@ export const PROVIDER_INFO = {
     icon: '🔵',
     description: '腾讯云对象存储服务',
     fields: [
-      { name: 'region', label: '区域', placeholder: 'ap-guangzhou', required: true },
-      { name: 'bucket', label: 'Bucket 名称', placeholder: 'my-bucket-1234567890', required: true },
-      { name: 'secretId', label: 'Secret ID', placeholder: 'AKIDxxxxxxxx', required: true },
-      { name: 'secretKey', label: 'Secret Key', placeholder: 'xxxxxxxx', required: true, type: 'password' },
+      {
+        name: 'region',
+        label: '区域',
+        placeholder: 'ap-guangzhou',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入区域';
+          if (!value.startsWith('ap-')) return '区域格式错误，应为 ap-xxx';
+          return null;
+        }
+      },
+      {
+        name: 'bucket',
+        label: 'Bucket 名称',
+        placeholder: 'my-bucket-1234567890',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入 Bucket 名称';
+          if (value.length < 1 || value.length > 50) return 'Bucket 名称长度应为 1-50 个字符';
+          return null;
+        }
+      },
+      {
+        name: 'secretId',
+        label: 'Secret ID',
+        placeholder: 'AKIDxxxxxxxx',
+        required: true,
+        validate: (value) => !value ? '请输入 Secret ID' : null
+      },
+      {
+        name: 'secretKey',
+        label: 'Secret Key',
+        placeholder: '••••••••',
+        required: true,
+        type: 'password',
+        validate: (value) => !value ? '请输入 Secret Key' : null
+      },
+      {
+        name: 'path',
+        label: '上传路径',
+        placeholder: 'docs/（可选，留空为根目录）',
+        required: false,
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
     ],
     helpUrl: 'https://cloud.tencent.com/product/cos',
   },
@@ -134,10 +235,60 @@ export const PROVIDER_INFO = {
     icon: '🟢',
     description: '亚马逊 S3 云存储',
     fields: [
-      { name: 'region', label: '区域', placeholder: 'us-east-1', required: true },
-      { name: 'bucket', label: 'Bucket 名称', placeholder: 'my-bucket', required: true },
-      { name: 'accessKeyId', label: 'Access Key ID', placeholder: 'AKIAIOSFODNN7EXAMPLE', required: true },
-      { name: 'secretAccessKey', label: 'Secret Access Key', placeholder: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', required: true, type: 'password' },
+      {
+        name: 'region',
+        label: '区域',
+        placeholder: 'us-east-1',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入区域';
+          if (!/^[a-z]{2}-[a-z]+-\d{1}$/.test(value)) return '区域格式错误，例如 us-east-1';
+          return null;
+        }
+      },
+      {
+        name: 'bucket',
+        label: 'Bucket 名称',
+        placeholder: 'my-bucket',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入 Bucket 名称';
+          if (value.length < 3 || value.length > 63) return 'Bucket 名称长度应为 3-63 个字符';
+          if (!/^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$/.test(value)) return 'Bucket 名称只能包含小写字母、数字、点和连字符';
+          return null;
+        }
+      },
+      {
+        name: 'accessKeyId',
+        label: 'Access Key ID',
+        placeholder: 'AKIAIOSFODNN7EXAMPLE',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入 Access Key ID';
+          if (!/^AKIA[0-9A-Z]{16}$/.test(value)) return 'Access Key ID 格式错误';
+          return null;
+        }
+      },
+      {
+        name: 'secretAccessKey',
+        label: 'Secret Access Key',
+        placeholder: '••••••••',
+        required: true,
+        type: 'password',
+        validate: (value) => !value ? '请输入 Secret Access Key' : null
+      },
+      {
+        name: 'path',
+        label: '上传路径',
+        placeholder: 'docs/（可选，留空为根目录）',
+        required: false,
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
     ],
     helpUrl: 'https://aws.amazon.com/s3/',
   },
@@ -146,12 +297,87 @@ export const PROVIDER_INFO = {
     icon: '🔷',
     description: '高性能对象存储 (S3 兼容)',
     fields: [
-      { name: 'endPoint', label: '服务器地址', placeholder: 'minio.example.com', required: true },
-      { name: 'port', label: '端口', placeholder: '9000', required: true },
-      { name: 'useSSL', label: '使用 SSL', placeholder: 'false', required: true },
-      { name: 'bucket', label: 'Bucket 名称', placeholder: 'my-bucket', required: true },
-      { name: 'accessKey', label: 'Access Key', placeholder: 'minioadmin', required: true },
-      { name: 'secretKey', label: 'Secret Key', placeholder: 'minioadmin', required: true, type: 'password' },
+      {
+        name: 'endPoint',
+        label: '服务器地址',
+        placeholder: 'minio.example.com',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入服务器地址';
+          // 支持域名、IP 地址、localhost
+          const domainRegex = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}|localhost|(\d{1,3}\.){3}\d{1,3}$/;
+          if (!domainRegex.test(value)) return '请输入有效的服务器地址';
+          return null;
+        }
+      },
+      {
+        name: 'port',
+        label: '端口',
+        placeholder: '9000',
+        required: true,
+        defaultValue: '9000',
+        validate: (value) => {
+          if (!value) return '请输入端口号';
+          const port = parseInt(value);
+          if (isNaN(port) || port < 1 || port > 65535) return '请输入有效的端口号 (1-65535)';
+          return null;
+        }
+      },
+      {
+        name: 'useSSL',
+        label: '使用 SSL',
+        placeholder: '选择是否使用 SSL',
+        required: true,
+        type: 'select',
+        defaultValue: 'false',
+        options: [
+          { label: '是 (HTTPS)', value: 'true' },
+          { label: '否 (HTTP)', value: 'false' },
+        ],
+        validate: (value) => {
+          if (!value) return '请选择是否使用 SSL';
+          return null;
+        }
+      },
+      {
+        name: 'bucket',
+        label: 'Bucket 名称',
+        placeholder: 'my-bucket',
+        required: true,
+        validate: (value) => {
+          if (!value) return '请输入 Bucket 名称';
+          if (value.length < 3 || value.length > 63) return 'Bucket 名称长度应为 3-63 个字符';
+          if (!/^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$/.test(value)) return 'Bucket 名称只能包含小写字母、数字和连字符';
+          return null;
+        }
+      },
+      {
+        name: 'accessKey',
+        label: 'Access Key',
+        placeholder: '请输入 Access Key',
+        required: true,
+        validate: (value) => !value ? '请输入 Access Key' : null
+      },
+      {
+        name: 'secretKey',
+        label: 'Secret Key',
+        placeholder: '请输入 Secret Key',
+        required: true,
+        type: 'password',
+        validate: (value) => !value ? '请输入 Secret Key' : null
+      },
+      {
+        name: 'path',
+        label: '上传路径',
+        placeholder: 'docs/（可选，留空为根目录）',
+        required: false,
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
     ],
     helpUrl: 'https://min.io/docs/minio/linux/index.html',
   },

@@ -30,7 +30,7 @@ import {
   Image as ImageIcon,
   File,
 } from "lucide-react";
-import { exportToPDF, exportToPNG, exportToDOCX } from "@/lib/export";
+import { exportToPDF, exportToPDFWithPrint, exportToPNG, exportToDOCX } from "@/lib/export";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
 import emptyStateIcon from "@/assets/empty-state.png";
@@ -280,11 +280,10 @@ export default function Home() {
   };
 
   const handleExportPDF = async () => {
-    if (!previewRef.current) return;
     try {
       const filename = `document-${new Date().toISOString().slice(0, 10)}.pdf`;
-      await exportToPDF(previewRef.current, filename);
-      toast.success("PDF 导出成功");
+      exportToPDFWithPrint(markdown, filename);
+      toast.info("请在打印对话框中选择 \"另存为 PDF\"");
     } catch (error: any) {
       toast.error(error.message || "PDF 导出失败");
     }
