@@ -17,6 +17,12 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { MultiCloudStorageDialog } from "@/components/MultiCloudStorageDialog";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Moon,
   Sun,
   PanelLeft,
@@ -29,6 +35,7 @@ import {
   FileDown,
   Image as ImageIcon,
   File,
+  ChevronDown,
 } from "lucide-react";
 import { exportToPDFWithPrint, exportToPNG, exportToDOCX } from "@/lib/export";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -428,35 +435,43 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Export Buttons */}
+          {/* Export Dropdown */}
           <div className="hidden md:flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleExportPDF}
-              className="gap-2 text-muted-foreground hover:text-foreground"
-              title="导出为 PDF"
-            >
-              <FileDown size={16} /> PDF
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleExportPNG}
-              className="gap-2 text-muted-foreground hover:text-foreground"
-              title="导出为 PNG 图片"
-            >
-              <ImageIcon size={16} /> PNG
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleExportDOCX}
-              className="gap-2 text-muted-foreground hover:text-foreground"
-              title="导出为 DOCX"
-            >
-              <File size={16} /> DOCX
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  title="导出文档"
+                >
+                  <Download size={16} /> 导出 <ChevronDown size={12} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={handleExportPDF}>
+                  <FileDown size={16} className="mr-2 text-muted-foreground" />
+                  <div className="flex-1">
+                    <div className="font-medium">导出为 PDF</div>
+                    <div className="text-xs text-muted-foreground">高质量（智能分页）</div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPNG}>
+                  <ImageIcon size={16} className="mr-2 text-muted-foreground" />
+                  <div className="flex-1">
+                    <div className="font-medium">导出为 PNG</div>
+                    <div className="text-xs text-muted-foreground">图片格式</div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportDOCX}>
+                  <File size={16} className="mr-2 text-muted-foreground" />
+                  <div className="flex-1">
+                    <div className="font-medium">导出为 DOCX</div>
+                    <div className="text-xs text-muted-foreground">Word 文档</div>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div className="h-6 w-px bg-border mx-1 hidden md:block" />
