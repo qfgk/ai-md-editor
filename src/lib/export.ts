@@ -143,13 +143,13 @@ export function exportToPDFWithPrint(markdown: string, documentFilename?: string
             background: #ffffff;
             max-width: 210mm;
             margin: 0 auto;
-            padding: 15mm;
-            padding-top: calc(15mm + 50px); /* Space for banner */
+            padding: 8mm;
+            padding-top: calc(8mm + 50px); /* Space for banner */
           }
 
           @media print {
             body {
-              padding: 15mm; /* Remove banner space when printing */
+              padding: 8mm; /* Remove banner space when printing */
             }
           }
 
@@ -299,7 +299,7 @@ export function exportToPDFWithPrint(markdown: string, documentFilename?: string
 
           @media print {
             body {
-              padding: 15mm;
+              padding: 8mm;
             }
             .print-banner {
               display: none;
@@ -307,7 +307,7 @@ export function exportToPDFWithPrint(markdown: string, documentFilename?: string
 
             /* 设置页面边距，同时移除浏览器默认的页眉页脚 */
             @page {
-              margin: 15mm;
+              margin: 8mm;
               size: A4;
             }
           }
