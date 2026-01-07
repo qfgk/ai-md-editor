@@ -132,6 +132,38 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
             max-width: 210mm;
             margin: 0 auto;
             padding: 20mm;
+            padding-top: calc(20mm + 50px); /* Space for banner */
+          }
+
+          @media print {
+            body {
+              padding-top: 20mm; /* Remove banner space when printing */
+            }
+          }
+
+          /* 打印提示横幅 */
+          .print-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          }
+
+          .print-banner strong {
+            margin-right: 8px;
+          }
+
+          @media print {
+            .print-banner {
+              display: none;
+            }
           }
 
           h1, h2, h3, h4, h5, h6 {
@@ -252,14 +284,20 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
         </style>
       </head>
       <body>
+        <div class="print-banner">
+          <strong>💡 提示：</strong>请在打印对话框中选择「另存为 PDF」作为目标，然后点击保存
+        </div>
         ${htmlContent}
         <script>
           // Trigger print dialog when page loads
           window.onload = function() {
             setTimeout(function() {
               window.print();
-              window.close();
-            }, 250);
+              // Close window after printing (user may cancel)
+              setTimeout(function() {
+                window.close();
+              }, 1000);
+            }, 500);
           };
         </script>
       </body>
