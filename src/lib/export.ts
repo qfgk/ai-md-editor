@@ -126,18 +126,18 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
             font-size: 12pt;
-            line-height: 1.6;
+            line-height: 1.5;
             color: #000000;
             background: #ffffff;
             max-width: 210mm;
             margin: 0 auto;
-            padding: 20mm;
-            padding-top: calc(20mm + 50px); /* Space for banner */
+            padding: 15mm;
+            padding-top: calc(15mm + 50px); /* Space for banner */
           }
 
           @media print {
             body {
-              padding-top: 20mm; /* Remove banner space when printing */
+              padding: 15mm; /* Remove banner space when printing */
             }
           }
 
@@ -168,8 +168,8 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
 
           h1, h2, h3, h4, h5, h6 {
             font-weight: 600;
-            margin-top: 1.5em;
-            margin-bottom: 0.5em;
+            margin-top: 1.2em;
+            margin-bottom: 0.4em;
             page-break-after: avoid;
           }
 
@@ -181,9 +181,8 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
           h6 { font-size: 0.75em; }
 
           p {
-            margin-bottom: 1em;
-            orphans: 3;
-            widows: 3;
+            margin-bottom: 0.8em;
+            line-height: 1.5;
           }
 
           a {
@@ -206,7 +205,9 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
             padding: 1em;
             overflow-x: auto;
             page-break-inside: avoid;
-            margin-bottom: 1em;
+            margin-bottom: 0.8em;
+            max-height: 600px;
+            overflow-y: auto;
           }
 
           pre code {
@@ -223,22 +224,22 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
             margin-right: 0;
             color: #6b7280;
             font-style: italic;
-            page-break-inside: avoid;
+            margin-bottom: 0.8em;
           }
 
           ul, ol {
             margin-left: 2em;
-            margin-bottom: 1em;
+            margin-bottom: 0.8em;
           }
 
           li {
-            margin-bottom: 0.5em;
+            margin-bottom: 0.3em;
           }
 
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 1em;
+            margin-bottom: 0.8em;
             page-break-inside: avoid;
           }
 
@@ -268,9 +269,20 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
             page-break-inside: avoid;
           }
 
-          /* Avoid page breaks inside these elements */
-          h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, table, li {
+          /* 只有代码块、表格、图片避免分页切断 */
+          pre, table, img {
             break-inside: avoid;
+          }
+
+          /* 标题避免在页面底部孤立 */
+          h1, h2, h3, h4, h5, h6 {
+            break-after: avoid;
+          }
+
+          /* 允许段落跨页，但避免孤行 */
+          p {
+            orphans: 2;
+            widows: 2;
           }
 
           @media print {
