@@ -30,13 +30,13 @@
 
 ### Mermaid 流程图
 
-\`\`\`mermaid
+```mermaid
 graph TD
     A[Start] --> B{Is it working?}
     B -- Yes --> C[Great!]
     B -- No --> D[Debug]
     D --> B
-\`\`\`
+```
 
 ### 数学公式
 
