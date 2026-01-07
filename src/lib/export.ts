@@ -98,8 +98,20 @@ export async function exportToPNG(
  * Export content as PDF using browser print (Typora-quality)
  * This provides the best pagination and formatting
  */
-export function exportToPDFWithPrint(markdown: string, filename: string = 'document.pdf'): void {
+export function exportToPDFWithPrint(markdown: string, documentFilename?: string): void {
   try {
+    // Extract title from markdown or use filename
+    const titleMatch = markdown.match(/^#\s+(.+)$/m);
+    let title = titleMatch ? titleMatch[1].trim() : '文档';
+
+    // If filename is provided and different from default, use it
+    if (documentFilename && documentFilename !== 'document.md') {
+      title = documentFilename.replace(/\.md$/i, '');
+    }
+
+    // Clean title - remove invalid characters
+    title = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+
     // Create a new window for printing
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -115,7 +127,7 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>${filename.replace('.pdf', '')}</title>
+        <title>${title}</title>
         <style>
           * {
             margin: 0;
@@ -289,8 +301,14 @@ export function exportToPDFWithPrint(markdown: string, filename: string = 'docum
             body {
               padding: 0;
             }
-            .no-print {
+            .print-banner {
               display: none;
+            }
+
+            /* 移除浏览器默认的页眉页脚 */
+            @page {
+              margin: 0;
+              size: A4;
             }
           }
         </style>

@@ -288,18 +288,39 @@ export default function Home() {
 
   const handleExportPDF = async () => {
     try {
-      const filename = `document-${new Date().toISOString().slice(0, 10)}.pdf`;
-      exportToPDFWithPrint(markdown, filename);
+      // Use actual filename or extract from markdown title
+      const documentFilename = activeFileNode?.name || undefined;
+      exportToPDFWithPrint(markdown, documentFilename);
       toast.info("正在打开打印对话框，请选择 \"另存为 PDF\"");
     } catch (error: any) {
       toast.error(error.message || "PDF 导出失败");
     }
   };
 
+  // Helper function to generate export filename
+  const getExportFilename = (extension: string): string => {
+    // Try to get filename from active file
+    if (activeFileNode?.name) {
+      return activeFileNode.name.replace(/\.md$/i, '') + extension;
+    }
+
+    // Otherwise extract title from markdown
+    const titleMatch = markdown.match(/^#\s+(.+)$/m);
+    if (titleMatch && titleMatch[1]) {
+      let title = titleMatch[1].trim();
+      // Remove invalid filename characters
+      title = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '');
+      return title + extension;
+    }
+
+    // Fallback to default
+    return 'document' + extension;
+  };
+
   const handleExportPNG = async () => {
     if (!previewRef.current) return;
     try {
-      const filename = `document-${new Date().toISOString().slice(0, 10)}.png`;
+      const filename = getExportFilename('.png');
       await exportToPNG(previewRef.current, filename);
       toast.success("PNG 导出成功");
     } catch (error: any) {
@@ -309,7 +330,7 @@ export default function Home() {
 
   const handleExportDOCX = async () => {
     try {
-      const filename = `document-${new Date().toISOString().slice(0, 10)}.docx`;
+      const filename = getExportFilename('.docx');
       await exportToDOCX(markdown, filename);
       toast.success("DOCX 导出成功");
     } catch (error: any) {
