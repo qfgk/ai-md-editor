@@ -4,11 +4,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
+import { CloudProvider, isProviderConfigured, PROVIDER_INFO } from "@/lib/cloud-providers";
 
 export const SettingsDialog: React.FC = () => {
-  const { fontSize, lineNumbers, wordWrap, updateSettings } = useSettings();
+  const { fontSize, lineNumbers, wordWrap, defaultImageUploadProvider, updateSettings } = useSettings();
 
   return (
     <Dialog>
@@ -57,6 +59,37 @@ export const SettingsDialog: React.FC = () => {
               checked={wordWrap}
               onCheckedChange={(checked) => updateSettings({ wordWrap: checked })}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label>默认图片上传</Label>
+            <p className="text-sm text-muted-foreground">选择图片自动上传的云存储服务。</p>
+            <Select
+              value={defaultImageUploadProvider || "none"}
+              onValueChange={(value) =>
+                updateSettings({
+                  defaultImageUploadProvider: value === "none" ? null : (value as CloudProvider),
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="未设置" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">未设置</SelectItem>
+                {Object.values(CloudProvider).filter(
+                  (provider) => provider !== CloudProvider.GITHUB
+                ).map((provider) => {
+                  const configured = isProviderConfigured(provider);
+                  const info = PROVIDER_INFO[provider];
+                  return (
+                    <SelectItem key={provider} value={provider} disabled={!configured}>
+                      {info.icon} {info.name} {!configured && "(未配置)"}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </DialogContent>

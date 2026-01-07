@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { CloudProvider } from "@/lib/cloud-providers";
 
 interface Settings {
   fontSize: number;
   lineNumbers: boolean;
   wordWrap: boolean;
+  defaultImageUploadProvider: CloudProvider | null;
 }
 
 interface SettingsContextType extends Settings {
@@ -14,6 +16,7 @@ const DEFAULT_SETTINGS: Settings = {
   fontSize: 14,
   lineNumbers: true,
   wordWrap: true,
+  defaultImageUploadProvider: null,
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
