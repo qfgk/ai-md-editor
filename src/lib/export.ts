@@ -299,15 +299,15 @@ export function exportToPDFWithPrint(markdown: string, documentFilename?: string
 
           @media print {
             body {
-              padding: 0;
+              padding: 15mm;
             }
             .print-banner {
               display: none;
             }
 
-            /* 移除浏览器默认的页眉页脚 */
+            /* 设置页面边距，同时移除浏览器默认的页眉页脚 */
             @page {
-              margin: 0;
+              margin: 15mm;
               size: A4;
             }
           }
