@@ -496,6 +496,8 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const isUpdatingRef = useRef(false);
   const isExternalUpdateRef = useRef(false);
   const renderMermaidRef = useRef<(() => Promise<void>) | null>(null);
+  const isRenderingMermaidRef = useRef(false); // Prevent concurrent renders
+  const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Enhanced Markdown to HTML parser with better support for syntax
   const markdownToHTML = useCallback((markdown: string): string => {
@@ -927,10 +929,13 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
             }, 500); // Increased to 500ms for better performance
           }
 
-          // Render Mermaid diagrams after document changes
-          setTimeout(() => {
+          // Debounce Mermaid rendering to prevent performance issues
+          if (renderTimeoutRef.current) {
+            clearTimeout(renderTimeoutRef.current);
+          }
+          renderTimeoutRef.current = setTimeout(() => {
             renderMermaidRef.current?.();
-          }, 100);
+          }, 300);
         }
       },
       attributes: {
@@ -1123,37 +1128,46 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
     // Render Mermaid diagrams
     const renderMermaidDiagrams = async () => {
+      // Prevent concurrent renders
+      if (isRenderingMermaidRef.current) return;
+
       const codeBlocks = editorRef.current?.querySelectorAll('pre code[data-language="mermaid"]');
       if (!codeBlocks || codeBlocks.length === 0) return;
 
-      for (const block of codeBlocks) {
-        const pre = block.parentElement;
-        if (!pre) continue;
+      isRenderingMermaidRef.current = true;
 
-        // Store original code before rendering
-        const code = block.textContent || '';
-        if (!code) continue;
+      try {
+        for (const block of codeBlocks) {
+          const pre = block.parentElement;
+          if (!pre) continue;
 
-        // Check if already rendered
-        if (pre.classList.contains('mermaid-diagram')) continue;
+          // Check if already rendered
+          if (pre.classList.contains('mermaid-diagram')) continue;
 
-        // Store original code in data attribute
-        pre.setAttribute('data-original-code', code);
+          // Store original code before rendering
+          const code = block.textContent || '';
+          if (!code) continue;
 
-        try {
-          const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-          const { svg } = await mermaid.render(id, code);
+          // Store original code in data attribute
+          pre.setAttribute('data-original-code', code);
 
-          // Add hidden comment with original code before SVG
-          const svgWithCode = `<!-- MERMAID_ORIGINAL_CODE:${encodeURIComponent(code)} -->${svg}`;
+          try {
+            const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            const { svg } = await mermaid.render(id, code);
 
-          pre.innerHTML = svgWithCode;
-          pre.classList.add('mermaid-diagram');
-        } catch (error) {
-          console.error('Failed to render Mermaid diagram:', error);
-          // Remove mermaid-diagram class if rendering failed
-          pre.classList.remove('mermaid-diagram');
+            // Add hidden comment with original code before SVG
+            const svgWithCode = `<!-- MERMAID_ORIGINAL_CODE:${encodeURIComponent(code)} -->${svg}`;
+
+            pre.innerHTML = svgWithCode;
+            pre.classList.add('mermaid-diagram');
+          } catch (error) {
+            console.error('Failed to render Mermaid diagram:', error);
+            // Remove mermaid-diagram class if rendering failed
+            pre.classList.remove('mermaid-diagram');
+          }
         }
+      } finally {
+        isRenderingMermaidRef.current = false;
       }
     };
 
@@ -1163,18 +1177,6 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     // Initial render
     renderMermaidDiagrams();
 
-    // Observe DOM changes for Mermaid diagrams
-    const observer = new MutationObserver(() => {
-      renderMermaidDiagrams();
-    });
-
-    if (editorRef.current) {
-      observer.observe(editorRef.current, {
-        childList: true,
-        subtree: true,
-      });
-    }
-
     setIsReady(true);
     onEditorReady?.(view);
 
@@ -1182,7 +1184,9 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }
-      observer.disconnect();
+      if (renderTimeoutRef.current) {
+        clearTimeout(renderTimeoutRef.current);
+      }
       view.destroy();
       viewRef.current = null;
     };
@@ -1209,10 +1213,13 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
       // Update lastMarkdownRef to match the new content
       lastMarkdownRef.current = content;
 
-      // Render Mermaid diagrams after external content update
-      setTimeout(() => {
+      // Render Mermaid diagrams after external content update (debounced)
+      if (renderTimeoutRef.current) {
+        clearTimeout(renderTimeoutRef.current);
+      }
+      renderTimeoutRef.current = setTimeout(() => {
         renderMermaidRef.current?.();
-      }, 100);
+      }, 300);
     }
   }, [content, isReady, markdownToHTML, prosemirrorToMarkdown]);
 
@@ -1225,6 +1232,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
           line-height: 1.6;
           min-height: 100%;
+          white-space: pre-wrap; /* Fix ProseMirror warning */
         }
 
         .prosemirror-editor.dark {
