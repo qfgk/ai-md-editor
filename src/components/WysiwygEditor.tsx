@@ -964,14 +964,27 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
         .prosemirror-editor ul,
         .prosemirror-editor ol {
+          list-style: disc outside;
           list-style-type: disc;
+          list-style-position: outside;
           padding-left: 1.625em;
           margin-top: 1.25em;
           margin-bottom: 1.25em;
         }
 
         .prosemirror-editor ol {
+          list-style: decimal outside;
           list-style-type: decimal;
+          list-style-position: outside;
+        }
+
+        /* Nested lists */
+        .prosemirror-editor ul ul,
+        .prosemirror-editor ol ul,
+        .prosemirror-editor ul ol,
+        .prosemirror-editor ol ol {
+          list-style: inherit;
+          list-style-type: inherit;
         }
 
         .prosemirror-editor li {
