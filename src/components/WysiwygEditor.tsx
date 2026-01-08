@@ -2,8 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { Schema, DOMParser as ProseMirrorDOMParser } from "prosemirror-model";
-import { schema as basicSchema } from "prosemirror-schema-basic";
-import { addListNodes } from "prosemirror-schema-list";
 import { inputRules, wrappingInputRule, textblockTypeInputRule, InputRule } from "prosemirror-inputrules";
 import { keymap } from "prosemirror-keymap";
 import { history, undo, redo } from "prosemirror-history";
@@ -12,12 +10,9 @@ import { wrapInList, splitListItem, liftListItem, sinkListItem } from "prosemirr
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { toast } from "sonner";
-import { uploadImage, uploadVideo, getImageMarkdown, getVideoHTML } from "@/lib/image-upload";
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkStringify from "remark-stringify";
+import { uploadImage, uploadVideo } from "@/lib/image-upload";
 
-// Define schema with support for task lists, images, videos, and code blocks
+// Enhanced schema with fenced code blocks that support language parameter
 const schema = new Schema({
   nodes: {
     doc: {
@@ -57,6 +52,7 @@ const schema = new Schema({
       toDOM(node) { return ["h" + node.attrs.level, 0]; }
     },
     code_block: {
+      attrs: { language: { default: null } },
       content: "text*",
       marks: "",
       group: "block",
@@ -64,9 +60,22 @@ const schema = new Schema({
       defining: true,
       parseDOM: [{
         tag: "pre",
-        preserveWhitespace: "full"
+        getAttrs(dom) {
+          const code = (dom as HTMLElement).querySelector('code');
+          if (code) {
+            const classList = code.className;
+            const langMatch = classList.match(/language-(\w+)/);
+            return {
+              language: langMatch ? langMatch[1] : null
+            };
+          }
+          return {};
+        }
       }],
-      toDOM() { return ["pre", ["code", 0]]; }
+      toDOM(node) {
+        const attrs = node.attrs.language ? { class: `language-${node.attrs.language}` } : {};
+        return ["pre", ["code", attrs, 0]];
+      }
     },
     text: {
       group: "inline"
@@ -119,24 +128,21 @@ const schema = new Schema({
     bullet_list: {
       content: "list_item+",
       group: "block",
-      parseDOM: [{ tag: "ul" }],
+      parseDOM: [{ tag: "ul:not(.task-list)" }],
       toDOM() { return ["ul", 0]; }
     },
     list_item: {
       content: "paragraph block*",
-      parseDOM: [{ tag: "li" }],
+      parseDOM: [{ tag: "li:not(.task-item)" }],
       toDOM() { return ["li", 0]; },
       defining: true
     },
-    // Task list item support
+    // Task list support
     task_list: {
       content: "task_item+",
       group: "block",
       parseDOM: [{
         tag: "ul.task-list",
-        getAttrs(dom) {
-          return { class: (dom as HTMLElement).getAttribute("class") || "" };
-        }
       }],
       toDOM() { return ["ul", { class: "task-list" }, 0]; }
     },
@@ -148,8 +154,9 @@ const schema = new Schema({
       parseDOM: [{
         tag: "li.task-item",
         getAttrs(dom) {
+          const input = (dom as HTMLElement).querySelector('input[type="checkbox"]') as HTMLInputElement;
           return {
-            checked: (dom as HTMLElement).getAttribute("data-checked") === "true"
+            checked: input ? input.checked : false
           };
         }
       }],
@@ -157,7 +164,11 @@ const schema = new Schema({
         return ["li", {
           class: "task-item",
           "data-checked": node.attrs.checked
-        }, 0];
+        }, ["input", {
+          type: "checkbox",
+          checked: node.attrs.checked,
+          contentEditable: "false"
+        }], 0];
       }
     }
   },
@@ -421,105 +432,258 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const { fontSize, defaultImageUploadProvider } = useSettings();
   const [isReady, setIsReady] = useState(false);
 
-  // Convert markdown to HTML
+  // Enhanced Markdown to HTML parser with better support for syntax
   const markdownToHTML = useCallback((markdown: string): string => {
-    // Simple markdown to HTML conversion for initial content
-    let html = markdown
-      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      .replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>')
-      .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-      .replace(/\*(.*)\*/gim, '<em>$1</em>')
-      .replace(/`(.*?)`/gim, '<code>$1</code>')
-      .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img src="$2" alt="$1" />')
-      .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2">$1</a>')
-      .replace(/^\- \[ \] (.*$)/gim, '<li class="task-item" data-checked="false">$1</li>')
-      .replace(/^\- \[x\] (.*$)/gim, '<li class="task-item" data-checked="true">$1</li>')
-      .replace(/^\- (.*$)/gim, '<li>$1</li>')
-      .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
-      .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
-      .replace(/\n/gim, '<br>');
+    const lines = markdown.split('\n');
+    const result: string[] = [];
+    let inCodeBlock = false;
+    let codeBlockLang: string | null = null;
+    let codeBlockContent: string[] = [];
+    let inList = false;
+    let inTaskList = false;
 
-    // Wrap lists
-    if (html.includes('<li')) {
-      html = html.replace(/(<li.*<\/li>)/gim, '<ul>$1</ul>');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Handle code blocks
+      if (line.trim().startsWith('```')) {
+        if (!inCodeBlock) {
+          // Start code block
+          const lang = line.trim().substring(3).trim();
+          codeBlockLang = lang || null;
+          inCodeBlock = true;
+          codeBlockContent = [];
+        } else {
+          // End code block
+          const codeClass = codeBlockLang ? ` class="language-${codeBlockLang}"` : '';
+          result.push(`<pre><code${codeClass}>${escapeHtml(codeBlockContent.join('\n'))}</code></pre>`);
+          inCodeBlock = false;
+          codeBlockLang = null;
+          codeBlockContent = [];
+        }
+        continue;
+      }
+
+      if (inCodeBlock) {
+        codeBlockContent.push(line);
+        continue;
+      }
+
+      // Handle task lists
+      const taskMatch = line.match(/^(\s*)-\s*\[([ x])\]\s+(.*)$/);
+      if (taskMatch) {
+        if (!inTaskList) {
+          if (inList) result.push('</ul>');
+          result.push('<ul class="task-list">');
+          inTaskList = true;
+        }
+        const checked = taskMatch[2] === 'x' || taskMatch[2] === 'X';
+        result.push(`<li class="task-item" data-checked="${checked}"><input type="checkbox" ${checked ? 'checked' : ''} contentEditable="false" />${parseInlineMarkdown(taskMatch[3])}</li>`);
+        continue;
+      } else if (inTaskList) {
+        result.push('</ul>');
+        inTaskList = false;
+      }
+
+      // Handle regular lists
+      const listMatch = line.match(/^(\s*)([-*])\s+(.*)$/);
+      if (listMatch) {
+        if (!inList) {
+          result.push('<ul>');
+          inList = true;
+        }
+        result.push(`<li>${parseInlineMarkdown(listMatch[3])}</li>`);
+        continue;
+      } else if (inList) {
+        result.push('</ul>');
+        inList = false;
+      }
+
+      // Handle ordered lists
+      const orderedMatch = line.match(/^(\s*)\d+\.\s+(.*)$/);
+      if (orderedMatch) {
+        if (!inList) {
+          result.push('<ol>');
+          inList = true;
+        }
+        result.push(`<li>${parseInlineMarkdown(orderedMatch[2])}</li>`);
+        continue;
+      }
+
+      // Handle headings
+      const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        result.push(`<h${level}>${parseInlineMarkdown(headingMatch[2])}</h${level}>`);
+        continue;
+      }
+
+      // Handle blockquote
+      if (line.trim().startsWith('>')) {
+        result.push(`<blockquote>${parseInlineMarkdown(line.trim().substring(1).trim())}</blockquote>`);
+        continue;
+      }
+
+      // Handle horizontal rule
+      if (line.match(/^(-{3,}|_{3,}|\*{3,})$/)) {
+        result.push('<hr>');
+        continue;
+      }
+
+      // Handle empty lines
+      if (line.trim() === '') {
+        continue;
+      }
+
+      // Handle regular paragraphs
+      result.push(`<p>${parseInlineMarkdown(line)}</p>`);
     }
 
-    // Wrap paragraphs
-    const blocks = html.split('<br>');
-    html = blocks.map(block => {
-      if (block.trim() && !block.startsWith('<h') && !block.startsWith('<blockquote') &&
-          !block.startsWith('<pre') && !block.startsWith('<ul')) {
-        return `<p>${block}</p>`;
-      }
-      return block;
-    }).join('\n');
+    // Close any open tags
+    if (inTaskList) result.push('</ul>');
+    if (inList) {
+      if (inTaskList) result.push('</ul>');
+      else result.push(inTaskList ? '</ul>' : '</ul>');
+    }
 
-    return html;
+    return result.join('\n');
   }, []);
 
-  // Convert ProseMirror document to markdown
+  // Helper function to parse inline markdown
+  function parseInlineMarkdown(text: string): string {
+    return text
+      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/~~(.+?)~~/g, '<del>$1</del>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  }
+
+  // Helper function to escape HTML
+  function escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Enhanced ProseMirror to Markdown converter
   const prosemirrorToMarkdown = useCallback((view: EditorView): string => {
     let markdown = "";
+    let inList = false;
+    let inTaskList = false;
 
-    view.state.doc.descendants((node) => {
+    view.state.doc.descendants((node, pos) => {
       if (node.isBlock) {
         const text = node.textContent;
 
         switch (node.type.name) {
           case "heading":
+            if (inList || inTaskList) {
+              inList = false;
+              inTaskList = false;
+            }
             const level = "#".repeat(node.attrs.level);
             markdown += `${level} ${text}\n\n`;
             break;
+
           case "paragraph":
+            if (inList || inTaskList) {
+              inList = false;
+              inTaskList = false;
+            }
             if (text.trim()) {
               markdown += `${text}\n\n`;
             }
             break;
+
           case "blockquote":
+            if (inList || inTaskList) {
+              inList = false;
+              inTaskList = false;
+            }
             markdown += `> ${text}\n\n`;
             break;
+
           case "code_block":
-            markdown += `\`\`\`\n${text}\n\`\`\`\n\n`;
+            if (inList || inTaskList) {
+              inList = false;
+              inTaskList = false;
+            }
+            const lang = node.attrs.language ? node.attrs.language : '';
+            markdown += `\`\`\`${lang}\n${text}\n\`\`\`\n\n`;
             break;
+
           case "ordered_list":
-            markdown += `1. ${text}\n`;
+            if (!inList) {
+              inList = true;
+              markdown += `\n`;
+            }
+            node.forEach((li, offset) => {
+              markdown += `1. ${li.textContent}\n`;
+            });
+            markdown += `\n`;
             break;
+
           case "bullet_list":
-            markdown += `- ${text}\n`;
+            if (!inList) {
+              inList = true;
+              markdown += `\n`;
+            }
+            node.forEach((li, offset) => {
+              markdown += `- ${li.textContent}\n`;
+            });
+            markdown += `\n`;
             break;
+
           case "task_list":
+            inTaskList = true;
+            markdown += `\n`;
             node.forEach((taskItem) => {
               const checked = taskItem.attrs.checked ? "[x]" : "[ ]";
-              markdown += `- ${checked} ${taskItem.textContent}\n`;
+              const itemText = taskItem.textContent;
+              markdown += `- ${checked} ${itemText}\n`;
             });
-            markdown += "\n";
+            markdown += `\n`;
             break;
+
           case "horizontal_rule":
-            markdown += "---\n\n";
+            if (inList || inTaskList) {
+              inList = false;
+              inTaskList = false;
+            }
+            markdown += `---\n\n`;
             break;
         }
-      } else if (node.isInline) {
-        if (node.type.name === "image") {
-          markdown += `![${node.attrs.alt || ""}](${node.attrs.src})`;
-        } else if (node.marks) {
-          let markedText = node.textContent;
-          node.marks.forEach((mark) => {
-            if (mark.type.name === "strong") {
+      } else if (node.isInline && node.type.name !== "image") {
+        // Handle inline marks
+        let markedText = node.textContent || '';
+        node.marks?.forEach((mark) => {
+          switch (mark.type.name) {
+            case "strong":
               markedText = `**${markedText}**`;
-            } else if (mark.type.name === "em") {
+              break;
+            case "em":
               markedText = `*${markedText}*`;
-            } else if (mark.type.name === "code") {
+              break;
+            case "code":
               markedText = `\`${markedText}\``;
-            } else if (mark.type.name === "link") {
+              break;
+            case "link":
               markedText = `[${markedText}](${mark.attrs.href})`;
-            }
-          });
+              break;
+          }
+        });
+
+        // Add the marked text if it's not already in the markdown
+        if (markedText && !markdown.endsWith(markedText)) {
           markdown += markedText;
-        } else {
-          markdown += node.textContent;
         }
+      } else if (node.type.name === "image") {
+        const alt = node.attrs.alt || '';
+        const src = node.attrs.src;
+        markdown += `![${alt}](${src})`;
       }
     });
 
@@ -685,7 +849,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         .prosemirror-editor {
           outline: none;
           padding: 1rem;
-          font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
           line-height: 1.6;
           min-height: 100%;
         }
@@ -712,8 +876,8 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           line-height: 1.3;
         }
 
-        .prosemirror-editor h1 { font-size: 2em; }
-        .prosemirror-editor h2 { font-size: 1.5em; }
+        .prosemirror-editor h1 { font-size: 2em; border-bottom: 1px solid rgba(128,128,128,0.3); padding-bottom: 0.3em; }
+        .prosemirror-editor h2 { font-size: 1.5em; border-bottom: 1px solid rgba(128,128,128,0.2); padding-bottom: 0.3em; }
         .prosemirror-editor h3 { font-size: 1.25em; }
 
         .prosemirror-editor p {
@@ -721,24 +885,26 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         }
 
         .prosemirror-editor blockquote {
-          border-left: 3px solid #3b82f6;
+          border-left: 4px solid #3b82f6;
           padding-left: 1em;
           margin: 1em 0;
-          opacity: 0.8;
+          opacity: 0.85;
+          color: rgba(128, 128, 128, 1);
         }
 
         .prosemirror-editor code {
-          background-color: rgba(128, 128, 128, 0.2);
+          background-color: rgba(128, 128, 128, 0.15);
           padding: 0.2em 0.4em;
           border-radius: 3px;
           font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
           font-size: 0.9em;
+          color: #e83e8c;
         }
 
         .prosemirror-editor pre {
-          background-color: rgba(128, 128, 128, 0.1);
-          border: 1px solid rgba(128, 128, 128, 0.3);
-          border-radius: 4px;
+          background-color: rgba(128, 128, 128, 0.08);
+          border: 1px solid rgba(128, 128, 128, 0.2);
+          border-radius: 6px;
           padding: 1em;
           margin: 1em 0;
           overflow-x: auto;
@@ -748,6 +914,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           background-color: transparent;
           padding: 0;
           border-radius: 0;
+          color: inherit;
         }
 
         .prosemirror-editor ul,
@@ -764,19 +931,39 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         .prosemirror-editor li.task-item {
           display: flex;
           align-items: flex-start;
-          margin: 0.25em 0;
+          margin: 0.4em 0;
+          padding: 0.2em 0;
         }
 
-        .prosemirror-editor li.task-item::before {
-          content: attr(data-checked) === "true" ? "☑" : "☐";
-          margin-right: 0.5em;
+        .prosemirror-editor li.task-item input[type="checkbox"] {
+          appearance: none;
+          -webkit-appearance: none;
+          width: 1.1em;
+          height: 1.1em;
+          border: 2px solid #3b82f6;
+          border-radius: 3px;
+          margin-right: 0.6em;
+          margin-top: 0.35em;
           cursor: pointer;
-          font-size: 1.2em;
+          flex-shrink: 0;
+          transition: all 0.2s;
+        }
+
+        .prosemirror-editor li.task-item input[type="checkbox"]:hover {
+          background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        .prosemirror-editor li.task-item input[type="checkbox"]:checked {
+          background-color: #3b82f6;
+          background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: 70%;
         }
 
         .prosemirror-editor li.task-item[data-checked="true"] {
           text-decoration: line-through;
-          opacity: 0.7;
+          opacity: 0.6;
         }
 
         .prosemirror-editor img {
@@ -784,7 +971,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           height: auto;
           display: block;
           margin: 1em 0;
-          border-radius: 4px;
+          border-radius: 6px;
         }
 
         .prosemirror-editor a {
@@ -799,7 +986,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
         .prosemirror-editor hr {
           border: none;
-          border-top: 1px solid rgba(128, 128, 128, 0.3);
+          border-top: 2px solid rgba(128, 128, 128, 0.2);
           margin: 2em 0;
         }
 
