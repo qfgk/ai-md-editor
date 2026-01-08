@@ -6,11 +6,13 @@ export class AWSS3Storage implements ICloudStorage {
   private bucket: string;
   private region: string;
   private path: string;
+  private imagePath: string;
 
-  constructor(config: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string; path?: string }) {
+  constructor(config: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string; path?: string; imagePath?: string }) {
     this.bucket = config.bucket;
     this.region = config.region;
     this.path = config.path || '';
+    this.imagePath = config.imagePath || 'images/';
 
     try {
       this.client = new S3Client({
@@ -61,7 +63,7 @@ export class AWSS3Storage implements ICloudStorage {
     if (!this.client) throw new Error('S3 客户端未初始化');
 
     try {
-      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
       const fileName = `${pathPrefix}${filename}`;
 
       // Convert File/Blob to ArrayBuffer for browser compatibility

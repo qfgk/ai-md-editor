@@ -14,9 +14,9 @@ export async function uploadImage(
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 8);
     const extension = file.name.split('.').pop() || 'png';
-    const filename = `images/${timestamp}-${randomStr}.${extension}`;
+    const filename = `${timestamp}-${randomStr}.${extension}`;
 
-    // Upload file as binary
+    // Upload file as binary (provider will add imagePath prefix)
     const url = await storage.uploadBinary(file, filename, file.type);
 
     return url;

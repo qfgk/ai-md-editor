@@ -69,6 +69,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         accessKeyId: credentials.accessKeyId,
         accessKeySecret: credentials.accessKeySecret,
         path: credentials.path || '',
+        imagePath: credentials.imagePath || 'images/',
       });
 
     case CloudProvider.TENCENT_COS:
@@ -78,6 +79,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         secretId: credentials.secretId,
         secretKey: credentials.secretKey,
         path: credentials.path || '',
+        imagePath: credentials.imagePath || 'images/',
       });
 
     case CloudProvider.AWS_S3:
@@ -87,6 +89,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         accessKeyId: credentials.accessKeyId,
         secretAccessKey: credentials.secretAccessKey,
         path: credentials.path || '',
+        imagePath: credentials.imagePath || 'images/',
       });
 
     case CloudProvider.MINIO:
@@ -98,6 +101,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         accessKey: credentials.accessKey,
         secretKey: credentials.secretKey,
         path: credentials.path || '',
+        imagePath: credentials.imagePath || 'images/',
       });
 
     default:
@@ -160,9 +164,22 @@ export const PROVIDER_INFO: Record<CloudProvider, {
       },
       {
         name: 'path',
-        label: '上传路径',
+        label: '文档上传路径',
         placeholder: 'docs/（可选，留空为根目录）',
         required: false,
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
+      {
+        name: 'imagePath',
+        label: '图片上传路径',
+        placeholder: 'images/（可选，默认为 images/）',
+        required: false,
+        defaultValue: 'images/',
         validate: (value) => {
           if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
             return '路径格式应为 folder/ 或 folder/subfolder/';
@@ -217,9 +234,22 @@ export const PROVIDER_INFO: Record<CloudProvider, {
       },
       {
         name: 'path',
-        label: '上传路径',
+        label: '文档上传路径',
         placeholder: 'docs/（可选，留空为根目录）',
         required: false,
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
+      {
+        name: 'imagePath',
+        label: '图片上传路径',
+        placeholder: 'images/（可选，默认为 images/）',
+        required: false,
+        defaultValue: 'images/',
         validate: (value) => {
           if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
             return '路径格式应为 folder/ 或 folder/subfolder/';
@@ -279,9 +309,22 @@ export const PROVIDER_INFO: Record<CloudProvider, {
       },
       {
         name: 'path',
-        label: '上传路径',
+        label: '文档上传路径',
         placeholder: 'docs/（可选，留空为根目录）',
         required: false,
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
+      {
+        name: 'imagePath',
+        label: '图片上传路径',
+        placeholder: 'images/（可选，默认为 images/）',
+        required: false,
+        defaultValue: 'images/',
         validate: (value) => {
           if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
             return '路径格式应为 folder/ 或 folder/subfolder/';
@@ -368,9 +411,22 @@ export const PROVIDER_INFO: Record<CloudProvider, {
       },
       {
         name: 'path',
-        label: '上传路径',
+        label: '文档上传路径',
         placeholder: 'docs/（可选，留空为根目录）',
         required: false,
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
+      {
+        name: 'imagePath',
+        label: '图片上传路径',
+        placeholder: 'images/（可选，默认为 images/）',
+        required: false,
+        defaultValue: 'images/',
         validate: (value) => {
           if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
             return '路径格式应为 folder/ 或 folder/subfolder/';

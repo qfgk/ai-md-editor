@@ -6,6 +6,7 @@ export class MinIOStorage implements ICloudStorage {
   private bucket: string;
   private endPoint: string;
   private path: string;
+  private imagePath: string;
 
   constructor(config: {
     endPoint: string;
@@ -15,10 +16,12 @@ export class MinIOStorage implements ICloudStorage {
     accessKey: string;
     secretKey: string;
     path?: string;
+    imagePath?: string;
   }) {
     this.bucket = config.bucket;
     this.endPoint = config.endPoint;
     this.path = config.path || '';
+    this.imagePath = config.imagePath || 'images/';
 
     try {
       // 构建 MinIO 的 endpoint URL
@@ -78,7 +81,7 @@ export class MinIOStorage implements ICloudStorage {
     if (!this.client) throw new Error('MinIO 客户端未初始化');
 
     try {
-      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
       const fileName = `${pathPrefix}${filename}`;
 
       // Convert File/Blob to ArrayBuffer for browser compatibility

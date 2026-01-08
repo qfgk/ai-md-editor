@@ -6,11 +6,13 @@ export class TencentCOSStorage implements ICloudStorage {
   private bucket: string;
   private region: string;
   private path: string;
+  private imagePath: string;
 
-  constructor(config: { bucket: string; region: string; secretId: string; secretKey: string; path?: string }) {
+  constructor(config: { bucket: string; region: string; secretId: string; secretKey: string; path?: string; imagePath?: string }) {
     this.bucket = config.bucket;
     this.region = config.region;
     this.path = config.path || '';
+    this.imagePath = config.imagePath || 'images/';
 
     try {
       this.client = new COS({
@@ -59,7 +61,7 @@ export class TencentCOSStorage implements ICloudStorage {
     if (!this.client) throw new Error('COS 客户端未初始化');
 
     return new Promise((resolve, reject) => {
-      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
       const fileName = `${pathPrefix}${filename}`;
 
       this.client!.putObject(

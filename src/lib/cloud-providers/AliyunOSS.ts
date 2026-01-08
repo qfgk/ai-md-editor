@@ -6,11 +6,13 @@ export class AliyunOSSStorage implements ICloudStorage {
   private bucket: string;
   private region: string;
   private path: string;
+  private imagePath: string;
 
-  constructor(config: { region: string; bucket: string; accessKeyId: string; accessKeySecret: string; path?: string }) {
+  constructor(config: { region: string; bucket: string; accessKeyId: string; accessKeySecret: string; path?: string; imagePath?: string }) {
     this.bucket = config.bucket;
     this.region = config.region;
     this.path = config.path || '';
+    this.imagePath = config.imagePath || 'images/';
 
     try {
       this.client = new OSS({
@@ -52,7 +54,7 @@ export class AliyunOSSStorage implements ICloudStorage {
     if (!this.client) throw new Error('OSS 客户端未初始化');
 
     try {
-      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
       const fileName = `${pathPrefix}${filename}`;
       const result = await this.client.put(fileName, file, {
         headers: {
