@@ -564,40 +564,34 @@ export default function Home() {
         )}
 
         {/* Editor & Preview Split View */}
-        <main className="flex-1 flex flex-col overflow-hidden relative panel-transition">
+        <main className="flex-1 flex flex-col overflow-hidden panel-transition">
           <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-            <ResizablePanel defaultSize={50} minSize={20} className="bg-editor-bg flex flex-col panel-transition">
+            {/* Editor Panel */}
+            <ResizablePanel
+              defaultSize={editorMode === 'wysiwyg' ? 100 : 50}
+              minSize={20}
+              className="bg-editor-bg flex flex-col panel-transition"
+            >
               <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-sidebar shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-muted-foreground">编辑器</span>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {editorMode === 'source' ? '编辑器' : '可视化编辑'}
+                  </span>
                 </div>
                 {editorMode === 'source' && <Toolbar editorView={editorView as EditorView} />}
               </div>
-              <div className="flex-1 overflow-hidden relative">
-                {editorMode === 'source' ? (
-                  <Editor
-                    value={markdown}
-                    onChange={handleEditorChange}
-                    onEditorCreate={setEditorView}
-                  />
-                ) : (
-                  <WysiwygEditor
-                    content={markdown}
-                    onChange={handleEditorChange}
-                    onEditorReady={setEditorView}
-                  />
-                )}
 
-                {/* Floating Control Buttons - Bottom Left (Typora style) */}
-                <div className="absolute bottom-4 left-4 flex flex-col gap-2 z-10">
+              <div className="flex-1 flex overflow-hidden">
+                {/* Left Control Bar */}
+                <div className="w-12 bg-sidebar border-r border-border flex flex-col items-center py-4 gap-3 shrink-0">
                   {/* Toggle Sidebar */}
                   <Button
-                    variant="secondary"
+                    variant="ghost"
                     size="icon"
                     onClick={() => setShowSidebar(!showSidebar)}
                     className={cn(
-                      "h-9 w-9 rounded-full shadow-lg transition-all duration-200 hover:scale-110",
-                      showSidebar && "bg-primary text-primary-foreground"
+                      "h-9 w-9 transition-all duration-200 hover:scale-110",
+                      showSidebar && "bg-primary/20 text-primary"
                     )}
                     title={showSidebar ? "隐藏侧边栏" : "显示侧边栏"}
                   >
@@ -606,23 +600,47 @@ export default function Home() {
 
                   {/* Toggle Editor Mode */}
                   <Button
-                    variant="secondary"
+                    variant="ghost"
                     size="icon"
                     onClick={() => setEditorMode(editorMode === 'source' ? 'wysiwyg' : 'source')}
-                    className="h-9 w-9 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+                    className={cn(
+                      "h-9 w-9 transition-all duration-200 hover:scale-110",
+                      editorMode === 'wysiwyg' && "bg-primary/20 text-primary"
+                    )}
                     title={editorMode === 'source' ? '切换到可视化编辑' : '切换到源代码编辑'}
                   >
                     {editorMode === 'source' ? <Eye size={18} /> : <Code size={18} />}
                   </Button>
                 </div>
+
+                {/* Editor Area */}
+                <div className="flex-1 overflow-hidden relative">
+                  {editorMode === 'source' ? (
+                    <Editor
+                      value={markdown}
+                      onChange={handleEditorChange}
+                      onEditorCreate={setEditorView}
+                    />
+                  ) : (
+                    <WysiwygEditor
+                      content={markdown}
+                      onChange={handleEditorChange}
+                      onEditorReady={setEditorView}
+                    />
+                  )}
+                </div>
               </div>
             </ResizablePanel>
 
-            <ResizableHandle withHandle className="bg-border hover:bg-primary/50 transition-colors w-1" />
-
-            <ResizablePanel defaultSize={50} minSize={20} className="bg-background">
-              <Preview content={markdown} ref={previewRef} />
-            </ResizablePanel>
+            {/* Preview Panel - Only show in source mode */}
+            {editorMode === 'source' && (
+              <>
+                <ResizableHandle withHandle className="bg-border hover:bg-primary/50 transition-colors w-1" />
+                <ResizablePanel defaultSize={50} minSize={20} className="bg-background">
+                  <Preview content={markdown} ref={previewRef} />
+                </ResizablePanel>
+              </>
+            )}
           </ResizablePanelGroup>
         </main>
       </div>
