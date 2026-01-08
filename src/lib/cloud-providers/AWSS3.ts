@@ -63,10 +63,15 @@ export class AWSS3Storage implements ICloudStorage {
     try {
       const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
       const fileName = `${pathPrefix}${filename}`;
+
+      // Convert File/Blob to ArrayBuffer for browser compatibility
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+
       const command = new PutObjectCommand({
         Bucket: this.bucket,
         Key: fileName,
-        Body: file,
+        Body: uint8Array,
         ContentType: contentType || 'application/octet-stream',
       });
 
