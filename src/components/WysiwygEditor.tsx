@@ -251,6 +251,30 @@ function codeBlockRule(): InputRule {
   return textblockTypeInputRule(/^```$/, schema.nodes.code_block);
 }
 
+// Input rule for markdown-style links [text](url)
+function linkRule(): InputRule {
+  return new InputRule(
+    /\[([^\]]+)\]\(([^)]+)\)$/,
+    (state, match, start, end) => {
+      const { link } = state.schema.marks;
+      const text = match[1];
+      const url = match[2];
+
+      // Create a transaction that replaces the matched text with a link
+      const tr = state.tr;
+
+      // Replace the entire match with the link text
+      tr.insertText(text, start, end);
+
+      // Add the link mark to the inserted text
+      const linkMark = link.create({ href: url });
+      tr.addMark(start, start + text.length, linkMark);
+
+      return tr;
+    }
+  );
+}
+
 // Build input rules array
 const inputRulesPlugin = inputRules({
   rules: [
@@ -265,6 +289,7 @@ const inputRulesPlugin = inputRules({
     headingRule(4),
     headingRule(5),
     headingRule(6),
+    linkRule(),
   ]
 });
 
@@ -432,6 +457,8 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const { theme } = useTheme();
   const { fontSize, defaultImageUploadProvider } = useSettings();
   const [isReady, setIsReady] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{ pos: number; attrs: { src: string; alt: string | null; title: string | null } } | null>(null);
+  const [editingImageMarkdown, setEditingImageMarkdown] = useState("");
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMarkdownRef = useRef<string>(content);
   const isUpdatingRef = useRef(false);
@@ -572,6 +599,57 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     div.textContent = text;
     return div.innerHTML;
   }
+
+  // Parse image markdown to extract src, alt, and title
+  function parseImageMarkdown(markdown: string): { src: string; alt: string; title: string | null } | null {
+    const match = markdown.match(/^!\[([^\]]*)\]\(([^)]+)(?:\s+"([^"]+)")?\)$/);
+    if (!match) return null;
+
+    return {
+      alt: match[1] || '',
+      src: match[2],
+      title: match[3] || null
+    };
+  }
+
+  // Handle saving the edited image
+  const handleSaveImageEdit = useCallback(() => {
+    if (!selectedImage || !viewRef.current) return;
+
+    const parsed = parseImageMarkdown(editingImageMarkdown);
+    if (!parsed) {
+      toast.error('Invalid image markdown format');
+      return;
+    }
+
+    const { src, alt, title } = parsed;
+    const view = viewRef.current;
+
+    // Create a new image node with updated attributes
+    const newImageNode = schema.nodes.image.create({ src, alt, title });
+
+    // Replace the old image with the new one
+    const tr = view.state.tr.replaceWith(selectedImage.pos, selectedImage.pos + 1, newImageNode);
+    view.dispatch(tr);
+
+    setSelectedImage(null);
+    setEditingImageMarkdown('');
+  }, [selectedImage, editingImageMarkdown]);
+
+  // Handle canceling the image edit
+  const handleCancelImageEdit = useCallback(() => {
+    setSelectedImage(null);
+    setEditingImageMarkdown('');
+  }, []);
+
+  // Handle clicking outside to close the editor
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      handleSaveImageEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelImageEdit();
+    }
+  }, [handleSaveImageEdit, handleCancelImageEdit]);
 
   // Enhanced ProseMirror to Markdown converter (optimized for performance)
   const prosemirrorToMarkdown = useCallback((view: EditorView): string => {
@@ -726,6 +804,20 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
       },
       attributes: {
         class: `prosemirror-editor ${theme === "dark" ? "dark" : "light"}`,
+      },
+      handleClickOn(view, pos, node, nodePos, event, direct) {
+        // Handle image clicks
+        if (node.type.name === 'image' && direct) {
+          event.preventDefault();
+          const { src, alt, title } = node.attrs;
+          setSelectedImage({ pos: nodePos, attrs: { src, alt, title } });
+          // Generate markdown for editing
+          const altText = alt || '';
+          const titleText = title ? ` "${title}"` : '';
+          setEditingImageMarkdown(`![${altText}](${src}${titleText})`);
+          return true;
+        }
+        return false;
       },
       handlePaste(view, event) {
         // First, check for HTML content (rich text from web browsers)
@@ -1170,6 +1262,52 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           color: #64748b;
         }
       `}</style>
+      {selectedImage && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-[600px] max-w-[90vw]">
+          <div className="bg-background border border-border rounded-lg shadow-lg p-4 animate-fade-in">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-foreground">编辑图片</span>
+              <button
+                onClick={handleCancelImageEdit}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <input
+              type="text"
+              value={editingImageMarkdown}
+              onChange={(e) => setEditingImageMarkdown(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full px-3 py-2 bg-editor-bg border border-border rounded-md text-foreground text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="![alt](url)"
+              autoFocus
+            />
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-xs text-muted-foreground">
+                Ctrl+Enter 保存 · Esc 取消
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCancelImageEdit}
+                  className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveImageEdit}
+                  className="px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div
         ref={editorRef}
         className="flex-1 overflow-auto"
