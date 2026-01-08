@@ -861,20 +861,34 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
       <style>{`
         .prosemirror-editor {
           outline: none;
-          padding: 1rem;
+          padding: 2rem;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
           line-height: 1.6;
           min-height: 100%;
         }
 
         .prosemirror-editor.dark {
-          background-color: oklch(var(--color-editor-bg));
-          color: oklch(var(--color-editor-text));
+          background-color: oklch(var(--color-background));
+          color: oklch(var(--color-foreground));
         }
 
         .prosemirror-editor.light {
-          background-color: oklch(var(--color-editor-bg));
-          color: oklch(var(--color-editor-text));
+          background-color: oklch(var(--color-background));
+          color: oklch(var(--color-foreground));
+        }
+
+        /* Typography - Match Tailwind prose styles */
+        .prosemirror-editor > * + * {
+          margin-top: 1.5em;
+          margin-bottom: 0;
+        }
+
+        .prosemirror-editor h1:first-child,
+        .prosemirror-editor h2:first-child,
+        .prosemirror-editor h3:first-child,
+        .prosemirror-editor h4:first-child,
+        .prosemirror-editor p:first-child {
+          margin-top: 0;
         }
 
         .prosemirror-editor h1,
@@ -883,59 +897,97 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         .prosemirror-editor h4,
         .prosemirror-editor h5,
         .prosemirror-editor h6 {
-          font-weight: bold;
-          margin-top: 1em;
-          margin-bottom: 0.5em;
-          line-height: 1.3;
+          font-weight: 600;
+          line-height: 1.25;
         }
 
-        .prosemirror-editor h1 { font-size: 2em; border-bottom: 1px solid rgba(128,128,128,0.3); padding-bottom: 0.3em; }
-        .prosemirror-editor h2 { font-size: 1.5em; border-bottom: 1px solid rgba(128,128,128,0.2); padding-bottom: 0.3em; }
-        .prosemirror-editor h3 { font-size: 1.25em; }
+        .prosemirror-editor h1 { font-size: 2.25em; margin-top: 0; margin-bottom: 0.8888889em; }
+        .prosemirror-editor h2 { font-size: 1.5em; margin-top: 2em; margin-bottom: 1em; }
+        .prosemirror-editor h3 { font-size: 1.25em; margin-top: 1.6em; margin-bottom: 0.6em; }
 
         .prosemirror-editor p {
-          margin: 0.5em 0;
+          margin-top: 1.25em;
+          margin-bottom: 1.25em;
         }
 
         .prosemirror-editor blockquote {
-          border-left: 4px solid #3b82f6;
+          font-weight: 500;
+          font-style: italic;
+          color: #64748b;
+          border-left-width: 0.25rem;
+          border-left-color: #e2e8f0;
+          quotes: "\\201C""\\201D""\\2018""\\2019";
+          margin-top: 1.6em;
+          margin-bottom: 1.6em;
           padding-left: 1em;
-          margin: 1em 0;
-          opacity: 0.85;
-          color: rgba(128, 128, 128, 1);
+        }
+
+        .dark .prosemirror-editor blockquote {
+          border-left-color: #334155;
+          color: #94a3b8;
         }
 
         .prosemirror-editor code {
-          background-color: rgba(128, 128, 128, 0.15);
-          padding: 0.2em 0.4em;
-          border-radius: 3px;
-          font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-          font-size: 0.9em;
           color: #e83e8c;
+          font-weight: 600;
+          font-size: 0.875em;
+          background-color: #f1f5f9;
+          padding: 0.2em 0.4em;
+          border-radius: 0.25rem;
+        }
+
+        .dark .prosemirror-editor code {
+          background-color: #1e293b;
+          color: #f472b6;
         }
 
         .prosemirror-editor pre {
-          background-color: rgba(128, 128, 128, 0.08);
-          border: 1px solid rgba(128, 128, 128, 0.2);
-          border-radius: 6px;
-          padding: 1em;
-          margin: 1em 0;
+          color: #e2e8f0;
+          background-color: #1e293b;
           overflow-x: auto;
+          font-size: 0.875em;
+          line-height: 1.7142857;
+          margin-top: 1.7142857em;
+          margin-bottom: 1.7142857em;
+          border-radius: 0.375rem;
+          padding: 0.8571429em 1.1428571em;
         }
 
         .prosemirror-editor pre code {
           background-color: transparent;
-          padding: 0;
+          border-width: 0;
           border-radius: 0;
+          padding: 0;
+          font-weight: 400;
           color: inherit;
         }
 
         .prosemirror-editor ul,
         .prosemirror-editor ol {
-          padding-left: 2em;
-          margin: 0.5em 0;
+          list-style-type: disc;
+          padding-left: 1.625em;
+          margin-top: 1.25em;
+          margin-bottom: 1.25em;
         }
 
+        .prosemirror-editor ol {
+          list-style-type: decimal;
+        }
+
+        .prosemirror-editor li {
+          margin-top: 0.5em;
+          margin-bottom: 0.5em;
+        }
+
+        .prosemirror-editor ul > li::marker {
+          color: #64748b;
+        }
+
+        .dark .prosemirror-editor ul > li::marker {
+          color: #94a3b8;
+        }
+
+        /* Task lists */
         .prosemirror-editor ul.task-list {
           list-style: none;
           padding-left: 0;
@@ -944,34 +996,37 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         .prosemirror-editor li.task-item {
           display: flex;
           align-items: flex-start;
-          margin: 0.4em 0;
-          padding: 0.2em 0;
+          margin-top: 0.5em;
+          margin-bottom: 0.5em;
         }
 
         .prosemirror-editor li.task-item input[type="checkbox"] {
           appearance: none;
           -webkit-appearance: none;
-          width: 1.1em;
-          height: 1.1em;
-          border: 2px solid #3b82f6;
-          border-radius: 3px;
-          margin-right: 0.6em;
-          margin-top: 0.35em;
+          width: 1.2em;
+          height: 1.2em;
+          border: 2px solid #94a3b8;
+          border-radius: 0.25em;
+          margin-right: 0.5em;
+          margin-top: 0.15em;
           cursor: pointer;
           flex-shrink: 0;
           transition: all 0.2s;
+          position: relative;
+        }
+
+        .dark .prosemirror-editor li.task-item input[type="checkbox"] {
+          border-color: #64748b;
         }
 
         .prosemirror-editor li.task-item input[type="checkbox"]:hover {
-          background-color: rgba(59, 130, 246, 0.1);
+          border-color: #3b82f6;
         }
 
         .prosemirror-editor li.task-item input[type="checkbox"]:checked {
           background-color: #3b82f6;
+          border-color: #3b82f6;
           background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: 70%;
         }
 
         .prosemirror-editor li.task-item[data-checked="true"] {
@@ -983,24 +1038,30 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           max-width: 100%;
           height: auto;
           display: block;
-          margin: 1em 0;
-          border-radius: 6px;
+          margin: 2em auto;
+          border-radius: 0.5rem;
         }
 
         .prosemirror-editor a {
-          color: #3b82f6;
+          color: #2563eb;
           text-decoration: underline;
-          cursor: pointer;
+          font-weight: 500;
         }
 
         .prosemirror-editor a:hover {
-          text-decoration: none;
+          color: #1d4ed8;
         }
 
         .prosemirror-editor hr {
-          border: none;
-          border-top: 2px solid rgba(128, 128, 128, 0.2);
-          margin: 2em 0;
+          border-style: solid;
+          border-color: #e2e8f0;
+          border-width: 1px 0 0 0;
+          height: 0;
+          margin: 3em 0;
+        }
+
+        .dark .prosemirror-editor hr {
+          border-color: #334155;
         }
 
         .ProseMirror-focused {
@@ -1010,9 +1071,13 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         .ProseMirror p.is-editor-empty:first-child::before {
           content: attr(data-placeholder);
           float: left;
-          color: #aaa;
+          color: #94a3b8;
           pointer-events: none;
           height: 0;
+        }
+
+        .dark .ProseMirror p.is-editor-empty:first-child::before {
+          color: #64748b;
         }
       `}</style>
       <div
