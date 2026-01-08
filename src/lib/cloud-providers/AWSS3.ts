@@ -7,12 +7,14 @@ export class AWSS3Storage implements ICloudStorage {
   private region: string;
   private path: string;
   private imagePath: string;
+  private videoPath: string;
 
-  constructor(config: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string; path?: string; imagePath?: string }) {
+  constructor(config: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string; path?: string; imagePath?: string; videoPath?: string }) {
     this.bucket = config.bucket;
     this.region = config.region;
     this.path = config.path || '';
     this.imagePath = config.imagePath || 'images/';
+    this.videoPath = config.videoPath || 'videos/';
 
     try {
       this.client = new S3Client({
@@ -63,7 +65,16 @@ export class AWSS3Storage implements ICloudStorage {
     if (!this.client) throw new Error('S3 客户端未初始化');
 
     try {
-      const pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      // Determine path prefix based on content type
+      let pathPrefix = '';
+      if (contentType?.startsWith('image/')) {
+        pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      } else if (contentType?.startsWith('video/')) {
+        pathPrefix = this.videoPath ? this.videoPath.replace(/\/$/, '') + '/' : '';
+      } else {
+        pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      }
+
       const fileName = `${pathPrefix}${filename}`;
 
       // Convert File/Blob to ArrayBuffer for browser compatibility

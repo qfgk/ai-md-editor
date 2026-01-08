@@ -70,6 +70,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         accessKeySecret: credentials.accessKeySecret,
         path: credentials.path || '',
         imagePath: credentials.imagePath || 'images/',
+        videoPath: credentials.videoPath || 'videos/',
       });
 
     case CloudProvider.TENCENT_COS:
@@ -80,6 +81,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         secretKey: credentials.secretKey,
         path: credentials.path || '',
         imagePath: credentials.imagePath || 'images/',
+        videoPath: credentials.videoPath || 'videos/',
       });
 
     case CloudProvider.AWS_S3:
@@ -90,6 +92,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         secretAccessKey: credentials.secretAccessKey,
         path: credentials.path || '',
         imagePath: credentials.imagePath || 'images/',
+        videoPath: credentials.videoPath || 'videos/',
       });
 
     case CloudProvider.MINIO:
@@ -102,6 +105,7 @@ export function createCloudStorage(provider: CloudProvider): ICloudStorage {
         secretKey: credentials.secretKey,
         path: credentials.path || '',
         imagePath: credentials.imagePath || 'images/',
+        videoPath: credentials.videoPath || 'videos/',
       });
 
     default:
@@ -119,6 +123,22 @@ export const PROVIDER_INFO: Record<CloudProvider, {
   fields: ConfigField[];
   helpUrl: string;
 }> = {
+  [CloudProvider.GITHUB]: {
+    name: 'GitHub Gist',
+    icon: '🐙',
+    description: 'GitHub Gist 代码片段',
+    fields: [
+      {
+        name: 'token',
+        label: 'Personal Access Token',
+        placeholder: 'ghp_xxxxxxxxxxxxxxxxxxxx',
+        required: true,
+        type: 'password',
+        validate: (value) => !value ? '请输入 Personal Access Token' : null
+      },
+    ],
+    helpUrl: 'https://gist.github.com/',
+  },
   [CloudProvider.ALIYUN_OSS]: {
     name: '阿里云 OSS',
     icon: '🟠',
@@ -180,6 +200,19 @@ export const PROVIDER_INFO: Record<CloudProvider, {
         placeholder: 'images/（可选，默认为 images/）',
         required: false,
         defaultValue: 'images/',
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
+      {
+        name: 'videoPath',
+        label: '视频上传路径',
+        placeholder: 'videos/（可选，默认为 videos/）',
+        required: false,
+        defaultValue: 'videos/',
         validate: (value) => {
           if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
             return '路径格式应为 folder/ 或 folder/subfolder/';
@@ -257,6 +290,19 @@ export const PROVIDER_INFO: Record<CloudProvider, {
           return null;
         }
       },
+      {
+        name: 'videoPath',
+        label: '视频上传路径',
+        placeholder: 'videos/（可选，默认为 videos/）',
+        required: false,
+        defaultValue: 'videos/',
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
     ],
     helpUrl: 'https://cloud.tencent.com/product/cos',
   },
@@ -325,6 +371,19 @@ export const PROVIDER_INFO: Record<CloudProvider, {
         placeholder: 'images/（可选，默认为 images/）',
         required: false,
         defaultValue: 'images/',
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
+      {
+        name: 'videoPath',
+        label: '视频上传路径',
+        placeholder: 'videos/（可选，默认为 videos/）',
+        required: false,
+        defaultValue: 'videos/',
         validate: (value) => {
           if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
             return '路径格式应为 folder/ 或 folder/subfolder/';
@@ -427,6 +486,19 @@ export const PROVIDER_INFO: Record<CloudProvider, {
         placeholder: 'images/（可选，默认为 images/）',
         required: false,
         defaultValue: 'images/',
+        validate: (value) => {
+          if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
+            return '路径格式应为 folder/ 或 folder/subfolder/';
+          }
+          return null;
+        }
+      },
+      {
+        name: 'videoPath',
+        label: '视频上传路径',
+        placeholder: 'videos/（可选，默认为 videos/）',
+        required: false,
+        defaultValue: 'videos/',
         validate: (value) => {
           if (value && !value.startsWith('/') && !value.endsWith('/') && value.includes('/')) {
             return '路径格式应为 folder/ 或 folder/subfolder/';

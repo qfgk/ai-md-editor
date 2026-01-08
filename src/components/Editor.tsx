@@ -7,7 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { EditorView, keymap } from "@codemirror/view";
 import { toast } from "sonner";
-import { uploadImage, getImageMarkdown } from "@/lib/image-upload";
+import { uploadImage, uploadVideo, getImageMarkdown, getVideoHTML } from "@/lib/image-upload";
 
 interface EditorProps {
   value: string;
@@ -51,12 +51,15 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
             }},
           ]),
           EditorView.domEventHandlers({
-            paste: async (event, view) => {
+            paste: (event, view) => {
               const items = event.clipboardData?.items;
               if (!items) return;
 
               for (const item of items) {
-                if (item.type.startsWith("image/")) {
+                const isImage = item.type.startsWith("image/");
+                const isVideo = item.type.startsWith("video/");
+
+                if (isImage || isVideo) {
                   event.preventDefault();
                   const file = item.getAsFile();
                   if (!file) continue;
@@ -65,7 +68,9 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
                   const selection = state.selection.main;
 
                   // Show uploading indicator
-                  const placeholder = `![Uploading...]()`;
+                  const placeholder = isImage
+                    ? `![Uploading...]()`
+                    : `<p>Uploading video...</p>`;
                   const placeholderStart = selection.from;
 
                   dispatch({
@@ -77,58 +82,71 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
                     userEvent: "input.paste",
                   });
 
-                  try {
-                    let imageUrl: string;
+                  (async () => {
+                    try {
+                      let mediaUrl: string;
 
-                    if (defaultImageUploadProvider) {
-                      // Upload to cloud storage
-                      toast.loading("正在上传图片...", { id: "image-upload" });
-                      imageUrl = await uploadImage(file, defaultImageUploadProvider);
-                      toast.success("图片上传成功", { id: "image-upload" });
-                    } else {
-                      // Fallback to base64
-                      const reader = new FileReader();
-                      imageUrl = await new Promise<string>((resolve, reject) => {
-                        reader.onload = (e) => resolve(e.target?.result as string);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
+                      if (defaultImageUploadProvider) {
+                        // Upload to cloud storage
+                        const loadingId = isImage ? "image-upload" : "video-upload";
+                        toast.loading(isImage ? "正在上传图片..." : "正在上传视频...", { id: loadingId });
+
+                        if (isImage) {
+                          mediaUrl = await uploadImage(file, defaultImageUploadProvider);
+                        } else {
+                          mediaUrl = await uploadVideo(file, defaultImageUploadProvider);
+                        }
+
+                        toast.success(isImage ? "图片上传成功" : "视频上传成功", { id: loadingId });
+                      } else {
+                        // Fallback to base64
+                        const reader = new FileReader();
+                        mediaUrl = await new Promise<string>((resolve, reject) => {
+                          reader.onload = (e) => resolve(e.target?.result as string);
+                          reader.onerror = reject;
+                          reader.readAsDataURL(file);
+                        });
+                        toast.success(isImage ? "图片已嵌入（建议配置云存储）" : "视频已嵌入（建议配置云存储）");
+                      }
+
+                      // Replace placeholder with actual media
+                      view.dispatch({
+                        changes: {
+                          from: placeholderStart,
+                          to: placeholderStart + placeholder.length,
+                          insert: isImage
+                            ? getImageMarkdown(mediaUrl, file.name)
+                            : getVideoHTML(mediaUrl, file.name),
+                        },
+                        selection: { anchor: placeholderStart + 2 },
+                        userEvent: "input.paste",
                       });
-                      toast.success("图片已嵌入（建议配置云存储）");
+                    } catch (error) {
+                      // Remove placeholder on error
+                      view.dispatch({
+                        changes: {
+                          from: placeholderStart,
+                          to: placeholderStart + placeholder.length,
+                          insert: "",
+                        },
+                      });
+                      toast.error(error instanceof Error ? error.message : (isImage ? "图片上传失败" : "视频上传失败"));
                     }
+                  })();
 
-                    // Replace placeholder with actual image
-                    // Use transaction to ensure atomic replacement
-                    view.dispatch({
-                      changes: {
-                        from: placeholderStart,
-                        to: placeholderStart + placeholder.length,
-                        insert: getImageMarkdown(imageUrl, file.name),
-                      },
-                      selection: { anchor: placeholderStart + 2 },
-                      userEvent: "input.paste",
-                    });
-                  } catch (error) {
-                    // Remove placeholder on error
-                    view.dispatch({
-                      changes: {
-                        from: placeholderStart,
-                        to: placeholderStart + placeholder.length,
-                        insert: "",
-                      },
-                    });
-                    toast.error(error instanceof Error ? error.message : "图片上传失败");
-                  }
-
-                  return true;
+                  return;
                 }
               }
             },
-            drop: async (event, view) => {
+            drop: (event, view) => {
               const files = event.dataTransfer?.files;
               if (!files || files.length === 0) return;
 
               const file = files[0];
-              if (file.type.startsWith("image/")) {
+              const isImage = file.type.startsWith("image/");
+              const isVideo = file.type.startsWith("video/");
+
+              if (isImage || isVideo) {
                 event.preventDefault();
 
                 // Get drop position
@@ -136,7 +154,9 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
                 if (pos === null) return;
 
                 // Show uploading indicator
-                const placeholder = `![Uploading...]()`;
+                const placeholder = isImage
+                  ? `![Uploading...]()`
+                  : `<p>Uploading video...</p>`;
                 const placeholderStart = pos;
 
                 view.dispatch({
@@ -148,48 +168,59 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
                   userEvent: "input.drop",
                 });
 
-                try {
-                  let imageUrl: string;
+                (async () => {
+                  try {
+                    let mediaUrl: string;
 
-                  if (defaultImageUploadProvider) {
-                    // Upload to cloud storage
-                    toast.loading("正在上传图片...", { id: "image-upload" });
-                    imageUrl = await uploadImage(file, defaultImageUploadProvider);
-                    toast.success("图片上传成功", { id: "image-upload" });
-                  } else {
-                    // Fallback to base64
-                    const reader = new FileReader();
-                    imageUrl = await new Promise<string>((resolve, reject) => {
-                      reader.onload = (e) => resolve(e.target?.result as string);
-                      reader.onerror = reject;
-                      reader.readAsDataURL(file);
+                    if (defaultImageUploadProvider) {
+                      // Upload to cloud storage
+                      const loadingId = isImage ? "image-upload" : "video-upload";
+                      toast.loading(isImage ? "正在上传图片..." : "正在上传视频...", { id: loadingId });
+
+                      if (isImage) {
+                        mediaUrl = await uploadImage(file, defaultImageUploadProvider);
+                      } else {
+                        mediaUrl = await uploadVideo(file, defaultImageUploadProvider);
+                      }
+
+                      toast.success(isImage ? "图片上传成功" : "视频上传成功", { id: loadingId });
+                    } else {
+                      // Fallback to base64
+                      const reader = new FileReader();
+                      mediaUrl = await new Promise<string>((resolve, reject) => {
+                        reader.onload = (e) => resolve(e.target?.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                      });
+                      toast.success(isImage ? "图片已嵌入（建议配置云存储）" : "视频已嵌入（建议配置云存储）");
+                    }
+
+                    // Replace placeholder with actual media
+                    view.dispatch({
+                      changes: {
+                        from: placeholderStart,
+                        to: placeholderStart + placeholder.length,
+                        insert: isImage
+                          ? getImageMarkdown(mediaUrl, file.name)
+                          : getVideoHTML(mediaUrl, file.name),
+                      },
+                      selection: { anchor: placeholderStart + 2 },
+                      userEvent: "input.drop",
                     });
-                    toast.success("图片已嵌入（建议配置云存储）");
+                  } catch (error) {
+                    // Remove placeholder on error
+                    view.dispatch({
+                      changes: {
+                        from: placeholderStart,
+                        to: placeholderStart + placeholder.length,
+                        insert: "",
+                      },
+                    });
+                    toast.error(error instanceof Error ? error.message : (isImage ? "图片上传失败" : "视频上传失败"));
                   }
+                })();
 
-                  // Replace placeholder with actual image
-                  view.dispatch({
-                    changes: {
-                      from: placeholderStart,
-                      to: placeholderStart + placeholder.length,
-                      insert: getImageMarkdown(imageUrl, file.name),
-                    },
-                    selection: { anchor: placeholderStart + 2 },
-                    userEvent: "input.drop",
-                  });
-                } catch (error) {
-                  // Remove placeholder on error
-                  view.dispatch({
-                    changes: {
-                      from: placeholderStart,
-                      to: placeholderStart + placeholder.length,
-                      insert: "",
-                    },
-                  });
-                  toast.error(error instanceof Error ? error.message : "图片上传失败");
-                }
-
-                return true;
+                return;
               }
             },
           }),

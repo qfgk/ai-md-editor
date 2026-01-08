@@ -7,12 +7,14 @@ export class TencentCOSStorage implements ICloudStorage {
   private region: string;
   private path: string;
   private imagePath: string;
+  private videoPath: string;
 
-  constructor(config: { bucket: string; region: string; secretId: string; secretKey: string; path?: string; imagePath?: string }) {
+  constructor(config: { bucket: string; region: string; secretId: string; secretKey: string; path?: string; imagePath?: string; videoPath?: string }) {
     this.bucket = config.bucket;
     this.region = config.region;
     this.path = config.path || '';
     this.imagePath = config.imagePath || 'images/';
+    this.videoPath = config.videoPath || 'videos/';
 
     try {
       this.client = new COS({
@@ -61,7 +63,16 @@ export class TencentCOSStorage implements ICloudStorage {
     if (!this.client) throw new Error('COS 客户端未初始化');
 
     return new Promise((resolve, reject) => {
-      const pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      // Determine path prefix based on content type
+      let pathPrefix = '';
+      if (contentType?.startsWith('image/')) {
+        pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      } else if (contentType?.startsWith('video/')) {
+        pathPrefix = this.videoPath ? this.videoPath.replace(/\/$/, '') + '/' : '';
+      } else {
+        pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      }
+
       const fileName = `${pathPrefix}${filename}`;
 
       this.client!.putObject(

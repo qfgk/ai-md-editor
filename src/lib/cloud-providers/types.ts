@@ -3,13 +3,15 @@
  * 定义统一的云存储接口，支持多个云存储提供商
  */
 
-export enum CloudProvider {
-  GITHUB = 'github',
-  ALIYUN_OSS = 'aliyun_oss',
-  TENCENT_COS = 'tencent_cos',
-  AWS_S3 = 'aws_s3',
-  MINIO = 'minio',
-}
+export const CloudProvider = {
+  GITHUB: 'github',
+  ALIYUN_OSS: 'aliyun_oss',
+  TENCENT_COS: 'tencent_cos',
+  AWS_S3: 'aws_s3',
+  MINIO: 'minio',
+} as const;
+
+export type CloudProvider = typeof CloudProvider[keyof typeof CloudProvider];
 
 export interface CloudFile {
   name: string;

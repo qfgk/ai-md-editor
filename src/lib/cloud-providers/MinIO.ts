@@ -9,6 +9,7 @@ export class MinIOStorage implements ICloudStorage {
   private useSSL: boolean;
   private path: string;
   private imagePath: string;
+  private videoPath: string;
 
   constructor(config: {
     endPoint: string;
@@ -19,6 +20,7 @@ export class MinIOStorage implements ICloudStorage {
     secretKey: string;
     path?: string;
     imagePath?: string;
+    videoPath?: string;
   }) {
     this.bucket = config.bucket;
     this.endPoint = config.endPoint;
@@ -26,6 +28,7 @@ export class MinIOStorage implements ICloudStorage {
     this.useSSL = config.useSSL;
     this.path = config.path || '';
     this.imagePath = config.imagePath || 'images/';
+    this.videoPath = config.videoPath || 'videos/';
 
     try {
       // 构建 MinIO 的 endpoint URL
@@ -86,7 +89,16 @@ export class MinIOStorage implements ICloudStorage {
     if (!this.client) throw new Error('MinIO 客户端未初始化');
 
     try {
-      const pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      // Determine path prefix based on content type
+      let pathPrefix = '';
+      if (contentType?.startsWith('image/')) {
+        pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      } else if (contentType?.startsWith('video/')) {
+        pathPrefix = this.videoPath ? this.videoPath.replace(/\/$/, '') + '/' : '';
+      } else {
+        pathPrefix = this.imagePath ? this.imagePath.replace(/\/$/, '') + '/' : '';
+      }
+
       const fileName = `${pathPrefix}${filename}`;
 
       // Convert File/Blob to ArrayBuffer for browser compatibility

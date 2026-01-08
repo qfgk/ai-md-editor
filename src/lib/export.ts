@@ -573,7 +573,7 @@ export async function exportToDOCX(
                       value: 'single',
                       size: 6,
                     },
-                  },
+                  } as any,
                 }),
               ],
               spacing: {

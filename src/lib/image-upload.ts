@@ -27,6 +27,32 @@ export async function uploadImage(
 }
 
 /**
+ * Upload video to configured cloud storage
+ */
+export async function uploadVideo(
+  file: File,
+  provider: CloudProvider
+): Promise<string> {
+  try {
+    const storage = createCloudStorage(provider);
+
+    // Generate filename with timestamp
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    const extension = file.name.split('.').pop() || 'mp4';
+    const filename = `${timestamp}-${randomStr}.${extension}`;
+
+    // Upload file as binary (provider will add videoPath prefix)
+    const url = await storage.uploadBinary(file, filename, file.type);
+
+    return url;
+  } catch (error) {
+    console.error('Video upload failed:', error);
+    throw new Error(`视频上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
+}
+
+/**
  * Convert blob to file
  */
 export function blobToFile(blob: Blob, filename: string): File {
@@ -79,4 +105,11 @@ export async function extractImageFromDrop(
  */
 export function getImageMarkdown(url: string, alt?: string): string {
   return `![${alt || 'image'}](${url})\n`;
+}
+
+/**
+ * Get video HTML syntax
+ */
+export function getVideoHTML(url: string, alt?: string): string {
+  return `<video src="${url}" controls${alt ? ` title="${alt}"` : ''} style="max-width: 100%;"></video>\n`;
 }
