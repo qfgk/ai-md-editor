@@ -10,9 +10,11 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { Editor } from "@/components/Editor";
+import { WysiwygEditor } from "@/components/WysiwygEditor";
 import { Toolbar } from "@/components/Toolbar";
 import { EditorView } from "@codemirror/view";
 import { Preview } from "@/components/Preview";
+import { EditorView as ProseMirrorEditorView } from "prosemirror-view";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { MultiCloudStorageDialog } from "@/components/MultiCloudStorageDialog";
 import { Button } from "@/components/ui/button";
@@ -36,6 +38,8 @@ import {
   Image as ImageIcon,
   File,
   ChevronDown,
+  Code,
+  Eye,
 } from "lucide-react";
 import { exportToPDFWithPrint, exportToPNG, exportToDOCX } from "@/lib/export";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -93,6 +97,7 @@ export default function Home() {
   const { value: markdown, setValue: setMarkdown, lastSaved } = useAutoSave(STORAGE_KEY, DEFAULT_MARKDOWN);
   const { theme, toggleTheme } = useTheme();
   const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 768);
+  const [editorMode, setEditorMode] = useState<'source' | 'wysiwyg'>('source');
   const [rootNode, setRootNode] = useState<FileNode | null>(null);
   const [activeFileNode, setActiveFileNode] = useState<FileNode | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -108,7 +113,7 @@ export default function Home() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-  const [editorView, setEditorView] = useState<EditorView | null>(null);
+  const [editorView, setEditorView] = useState<EditorView | ProseMirrorEditorView | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -352,44 +357,49 @@ export default function Home() {
 
   // Synchronized Scrolling
   useEffect(() => {
-    if (!editorView || !previewRef.current) return;
+    if (!editorView || !previewRef.current || editorMode === 'wysiwyg') return;
 
-    const editorScroller = editorView.scrollDOM;
-    const previewScroller = previewRef.current;
+    // Check if it's a CodeMirror editor
+    if ('dom' in editorView) {
+      const editorScroller = (editorView as EditorView).scrollDOM;
+      const previewScroller = previewRef.current;
 
-    const handleEditorScroll = () => {
-      if (isScrollingRef.current) return;
-      isScrollingRef.current = true;
-      
-      const ratio = editorScroller.scrollTop / (editorScroller.scrollHeight - editorScroller.clientHeight);
-      const previewScrollTop = ratio * (previewScroller.scrollHeight - previewScroller.clientHeight);
-      
-      previewScroller.scrollTop = previewScrollTop;
-      
-      // Reset flag after a short delay
-      setTimeout(() => { isScrollingRef.current = false; }, 50);
-    };
+      const handleEditorScroll = () => {
+        if (isScrollingRef.current) return;
+        isScrollingRef.current = true;
 
-    const handlePreviewScroll = () => {
-      if (isScrollingRef.current) return;
-      isScrollingRef.current = true;
+        const ratio = editorScroller.scrollTop / (editorScroller.scrollHeight - editorScroller.clientHeight);
+        const previewScrollTop = ratio * (previewScroller.scrollHeight - previewScroller.clientHeight);
 
-      const ratio = previewScroller.scrollTop / (previewScroller.scrollHeight - previewScroller.clientHeight);
-      const editorScrollTop = ratio * (editorScroller.scrollHeight - editorScroller.clientHeight);
-      
-      editorScroller.scrollTop = editorScrollTop;
-      
-      setTimeout(() => { isScrollingRef.current = false; }, 50);
-    };
+        previewScroller.scrollTop = previewScrollTop;
 
-    editorScroller.addEventListener('scroll', handleEditorScroll);
-    previewScroller.addEventListener('scroll', handlePreviewScroll);
+        // Reset flag after a short delay
+        setTimeout(() => { isScrollingRef.current = false; }, 50);
+      };
 
-    return () => {
-      editorScroller.removeEventListener('scroll', handleEditorScroll);
-      previewScroller.removeEventListener('scroll', handlePreviewScroll);
-    };
-  }, [editorView]);
+      const handlePreviewScroll = () => {
+        if (isScrollingRef.current) return;
+        isScrollingRef.current = true;
+
+        const ratio = previewScroller.scrollTop / (previewScroller.scrollHeight - previewScroller.clientHeight);
+        const editorScrollTop = ratio * (editorScroller.scrollHeight - editorScroller.clientHeight);
+
+        editorScroller.scrollTop = editorScrollTop;
+
+        setTimeout(() => { isScrollingRef.current = false; }, 50);
+      };
+
+      editorScroller.addEventListener('scroll', handleEditorScroll);
+      previewScroller.addEventListener('scroll', handlePreviewScroll);
+
+      return () => {
+        editorScroller.removeEventListener('scroll', handleEditorScroll);
+        previewScroller.removeEventListener('scroll', handlePreviewScroll);
+      };
+    }
+
+    return () => {};
+  }, [editorView, editorMode]);
 
   return (
     <div className="h-screen w-full flex flex-col bg-background text-foreground overflow-hidden">
@@ -557,18 +567,41 @@ export default function Home() {
         <main className="flex-1 flex flex-col overflow-hidden relative">
           <ResizablePanelGroup direction="horizontal" className="h-full w-full">
             <ResizablePanel defaultSize={50} minSize={20} className="bg-editor-bg flex flex-col">
-              <Toolbar editorView={editorView} />
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-sidebar shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-muted-foreground">编辑器</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditorMode(editorMode === 'source' ? 'wysiwyg' : 'source')}
+                    className="gap-2 h-7 px-2 text-xs"
+                    title={editorMode === 'source' ? '切换到所见即所得编辑' : '切换到源代码编辑'}
+                  >
+                    {editorMode === 'source' ? <Eye size={14} /> : <Code size={14} />}
+                    {editorMode === 'source' ? '可视化编辑' : '源代码'}
+                  </Button>
+                </div>
+                {editorMode === 'source' && <Toolbar editorView={editorView as EditorView} />}
+              </div>
               <div className="flex-1 overflow-hidden">
-                <Editor 
-                  value={markdown} 
-                  onChange={handleEditorChange} 
-                  onEditorCreate={setEditorView}
-                />
+                {editorMode === 'source' ? (
+                  <Editor
+                    value={markdown}
+                    onChange={handleEditorChange}
+                    onEditorCreate={setEditorView}
+                  />
+                ) : (
+                  <WysiwygEditor
+                    content={markdown}
+                    onChange={handleEditorChange}
+                    onEditorReady={setEditorView}
+                  />
+                )}
               </div>
             </ResizablePanel>
-            
+
             <ResizableHandle withHandle className="bg-border hover:bg-primary/50 transition-colors w-1" />
-            
+
             <ResizablePanel defaultSize={50} minSize={20} className="bg-background">
               <Preview content={markdown} ref={previewRef} />
             </ResizablePanel>
