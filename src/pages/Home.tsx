@@ -357,6 +357,7 @@ export default function Home() {
 
   // Synchronized Scrolling
   useEffect(() => {
+    // Only sync scrolling in source mode with CodeMirror
     if (!editorView || !previewRef.current || editorMode === 'wysiwyg') return;
 
     // Check if it's a CodeMirror editor
@@ -398,6 +399,7 @@ export default function Home() {
       };
     }
 
+    // If it's not a CodeMirror editor, return early with empty cleanup
     return () => {};
   }, [editorView, editorMode]);
 
