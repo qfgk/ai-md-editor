@@ -57,6 +57,31 @@ export class AWSS3Storage implements ICloudStorage {
     }
   }
 
+  async uploadBinary(file: File | Blob, filename: string, contentType?: string): Promise<string> {
+    if (!this.client) throw new Error('S3 客户端未初始化');
+
+    try {
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const fileName = `${pathPrefix}${filename}`;
+      const command = new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: fileName,
+        Body: file,
+        ContentType: contentType || 'application/octet-stream',
+      });
+
+      await this.client.send(command);
+
+      // 生成访问 URL
+      const url = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${fileName}`;
+
+      return url;
+    } catch (error: any) {
+      console.error('AWS S3 binary upload failed:', error);
+      throw new Error(`二进制文件上传失败: ${error.message || '未知错误'}`);
+    }
+  }
+
   async download(fileId: string): Promise<string> {
     if (!this.client) throw new Error('S3 客户端未初始化');
 

@@ -56,6 +56,11 @@ export interface ICloudStorage {
   upload(file: CloudFile): Promise<CloudFileInfo>;
 
   /**
+   * 上传二进制文件（图片等）
+   */
+  uploadBinary(file: File | Blob, filename: string, contentType?: string): Promise<string>;
+
+  /**
    * 下载文件
    */
   download(fileId: string): Promise<string>;

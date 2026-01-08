@@ -48,6 +48,25 @@ export class AliyunOSSStorage implements ICloudStorage {
     }
   }
 
+  async uploadBinary(file: File | Blob, filename: string, contentType?: string): Promise<string> {
+    if (!this.client) throw new Error('OSS 客户端未初始化');
+
+    try {
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const fileName = `${pathPrefix}${filename}`;
+      const result = await this.client.put(fileName, file, {
+        headers: {
+          'Content-Type': contentType || 'application/octet-stream',
+        },
+      });
+
+      return result.url;
+    } catch (error: any) {
+      console.error('Aliyun OSS binary upload failed:', error);
+      throw new Error(`二进制文件上传失败: ${error.message || '未知错误'}`);
+    }
+  }
+
   async download(fileId: string): Promise<string> {
     if (!this.client) throw new Error('OSS 客户端未初始化');
 

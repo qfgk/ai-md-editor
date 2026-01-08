@@ -55,6 +55,33 @@ export class TencentCOSStorage implements ICloudStorage {
     });
   }
 
+  async uploadBinary(file: File | Blob, filename: string, contentType?: string): Promise<string> {
+    if (!this.client) throw new Error('COS 客户端未初始化');
+
+    return new Promise((resolve, reject) => {
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const fileName = `${pathPrefix}${filename}`;
+
+      this.client!.putObject(
+        {
+          Bucket: this.bucket,
+          Region: this.region,
+          Key: fileName,
+          Body: file,
+          ContentType: contentType || 'application/octet-stream',
+        },
+        (err: any, data: any) => {
+          if (err) {
+            console.error('Tencent COS binary upload failed:', err);
+            reject(new Error(`二进制文件上传失败: ${err.message || '未知错误'}`));
+          } else {
+            resolve(`https://${data.Location}`);
+          }
+        }
+      );
+    });
+  }
+
   async download(fileId: string): Promise<string> {
     if (!this.client) throw new Error('COS 客户端未初始化');
 

@@ -16,8 +16,8 @@ export async function uploadImage(
     const extension = file.name.split('.').pop() || 'png';
     const filename = `images/${timestamp}-${randomStr}.${extension}`;
 
-    // Upload file
-    const url = await storage.upload(file, filename);
+    // Upload file as binary
+    const url = await storage.uploadBinary(file, filename, file.type);
 
     return url;
   } catch (error) {

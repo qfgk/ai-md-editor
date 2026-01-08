@@ -74,6 +74,32 @@ export class MinIOStorage implements ICloudStorage {
     }
   }
 
+  async uploadBinary(file: File | Blob, filename: string, contentType?: string): Promise<string> {
+    if (!this.client) throw new Error('MinIO 客户端未初始化');
+
+    try {
+      const pathPrefix = this.path ? this.path.replace(/\/$/, '') + '/' : '';
+      const fileName = `${pathPrefix}${filename}`;
+      const command = new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: fileName,
+        Body: file,
+        ContentType: contentType || 'application/octet-stream',
+      });
+
+      await this.client.send(command);
+
+      // 构建访问URL
+      const protocol = this.endPoint.startsWith('https') ? 'https' : 'http';
+      const url = `${protocol}://${this.endPoint}/${this.bucket}/${fileName}`;
+
+      return url;
+    } catch (error: any) {
+      console.error('MinIO binary upload failed:', error);
+      throw new Error(`二进制文件上传失败: ${error.message || '未知错误'}`);
+    }
+  }
+
   async download(fileId: string): Promise<string> {
     if (!this.client) throw new Error('MinIO 客户端未初始化');
 
