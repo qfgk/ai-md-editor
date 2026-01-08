@@ -7,11 +7,20 @@ import { keymap } from "prosemirror-keymap";
 import { history, undo, redo } from "prosemirror-history";
 import { baseKeymap, toggleMark, setBlockType, chainCommands, exitCode, joinUp, joinDown, lift, selectParentNode } from "prosemirror-commands";
 import { wrapInList, splitListItem, liftListItem, sinkListItem } from "prosemirror-schema-list";
+import { tableEditing } from "prosemirror-tables";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { toast } from "sonner";
 import { uploadImage, uploadVideo } from "@/lib/image-upload";
 import { htmlToMarkdownAsync, getHTMLFromClipboard, downloadImageAsFile } from "@/lib/html-to-markdown";
+import mermaid from "mermaid";
+
+// Initialize Mermaid
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'default',
+  securityLevel: 'loose',
+});
 
 // Enhanced schema with fenced code blocks that support language parameter
 const schema = new Schema({
@@ -74,7 +83,7 @@ const schema = new Schema({
         }
       }],
       toDOM(node) {
-        const attrs = node.attrs.language ? { class: `language-${node.attrs.language}` } : {};
+        const attrs = node.attrs.language ? { class: `language-${node.attrs.language}`, "data-language": node.attrs.language } : {};
         return ["pre", ["code", attrs, 0]];
       }
     },
@@ -171,6 +180,28 @@ const schema = new Schema({
           contentEditable: "false"
         }], 0];
       }
+    },
+    // Table nodes
+    table: {
+      content: "table_row+",
+      group: "block",
+      parseDOM: [{ tag: "table" }],
+      toDOM() { return ["table", 0]; }
+    },
+    table_row: {
+      content: "(table_cell | table_header)*",
+      parseDOM: [{ tag: "tr" }],
+      toDOM() { return ["tr", 0]; }
+    },
+    table_header: {
+      content: "paragraph block*",
+      parseDOM: [{ tag: "th" }],
+      toDOM() { return ["th", 0]; }
+    },
+    table_cell: {
+      content: "paragraph block*",
+      parseDOM: [{ tag: "td" }],
+      toDOM() { return ["td", 0]; }
     }
   },
   marks: {
@@ -443,6 +474,7 @@ const plugins = [
   keymap(baseKeymap),
   inputRulesPlugin,
   history(),
+  tableEditing(),
 ];
 
 interface WysiwygEditorProps {
@@ -473,6 +505,9 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     let codeBlockContent: string[] = [];
     let inList = false;
     let inTaskList = false;
+    let inTable = false;
+    let tableRows: string[] = [];
+    let tableHeader: boolean = false;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -488,7 +523,8 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         } else {
           // End code block
           const codeClass = codeBlockLang ? ` class="language-${codeBlockLang}"` : '';
-          result.push(`<pre><code${codeClass}>${escapeHtml(codeBlockContent.join('\n'))}</code></pre>`);
+          const dataLang = codeBlockLang ? ` data-language="${codeBlockLang}"` : '';
+          result.push(`<pre><code${codeClass}${dataLang}>${escapeHtml(codeBlockContent.join('\n'))}</code></pre>`);
           inCodeBlock = false;
           codeBlockLang = null;
           codeBlockContent = [];
@@ -499,6 +535,35 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
       if (inCodeBlock) {
         codeBlockContent.push(line);
         continue;
+      }
+
+      // Handle tables
+      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+        if (!inTable) {
+          inTable = true;
+          tableRows = [];
+          tableHeader = false;
+        }
+
+        // Check if it's the separator row
+        if (line.match(/^\|[\s\-:]+\|$/)) {
+          tableHeader = true;
+          continue;
+        }
+
+        const cells = line.split('|').filter((_, idx, arr) => idx !== 0 && idx !== arr.length - 1);
+        const cellTags = cells.map(cell => `<td>${parseInlineMarkdown(cell.trim())}</td>`).join('');
+        tableRows.push(`<tr>${cellTags}</tr>`);
+        continue;
+      } else if (inTable) {
+        // End of table
+        if (tableRows.length > 0) {
+          result.push('<table>');
+          result.push(tableRows.join('\n'));
+          result.push('</table>');
+        }
+        inTable = false;
+        tableRows = [];
       }
 
       // Handle task lists
@@ -572,10 +637,14 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     }
 
     // Close any open tags
+    if (inTable && tableRows.length > 0) {
+      result.push('<table>');
+      result.push(tableRows.join('\n'));
+      result.push('</table>');
+    }
     if (inTaskList) result.push('</ul>');
     if (inList) {
-      if (inTaskList) result.push('</ul>');
-      else result.push(inTaskList ? '</ul>' : '</ul>');
+      result.push(inTaskList ? '</ul>' : '</ul>');
     }
 
     return result.join('\n');
@@ -715,6 +784,39 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         case "horizontal_rule":
           blocks.push(`---\n\n`);
           break;
+
+        case "table": {
+          const table: string[][] = [];
+
+          // Extract table rows
+          node.forEach((row) => {
+            if (row.type.name === 'table_row' || row.type.name === 'table_header') {
+              const cells: string[] = [];
+              row.forEach((cell) => {
+                if (cell.type.name === 'table_cell' || cell.type.name === 'table_header') {
+                  cells.push(getNodeTextContent(cell).trim());
+                }
+              });
+              table.push(cells);
+            }
+          });
+
+          // Convert table to markdown
+          if (table.length > 0) {
+            const header = table[0];
+            const separator = header.map(() => '---').join(' | ');
+
+            blocks.push(`| ${header.join(' | ')} |\n`);
+            blocks.push(`| ${separator} |\n`);
+
+            for (let i = 1; i < table.length; i++) {
+              blocks.push(`| ${table[i].join(' | ')} |\n`);
+            }
+
+            blocks.push('\n');
+          }
+          break;
+        }
       }
     });
 
@@ -990,6 +1092,41 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     // Initialize lastMarkdownRef to prevent duplicate updates on initial load
     lastMarkdownRef.current = prosemirrorToMarkdown(view);
 
+    // Render Mermaid diagrams
+    const renderMermaidDiagrams = async () => {
+      const codeBlocks = editorRef.current?.querySelectorAll('pre code[data-language="mermaid"]');
+      if (!codeBlocks) return;
+
+      for (const block of codeBlocks) {
+        const pre = block.parentElement;
+        if (!pre) continue;
+
+        const code = block.textContent || '';
+        try {
+          const { svg } = await mermaid.render('mermaid-' + Date.now() + Math.random(), code);
+          pre.innerHTML = svg;
+          pre.classList.add('mermaid-diagram');
+        } catch (error) {
+          console.error('Failed to render Mermaid diagram:', error);
+        }
+      }
+    };
+
+    // Initial render
+    renderMermaidDiagrams();
+
+    // Observe DOM changes for Mermaid diagrams
+    const observer = new MutationObserver(() => {
+      renderMermaidDiagrams();
+    });
+
+    if (editorRef.current) {
+      observer.observe(editorRef.current, {
+        childList: true,
+        subtree: true,
+      });
+    }
+
     setIsReady(true);
     onEditorReady?.(view);
 
@@ -997,6 +1134,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }
+      observer.disconnect();
       view.destroy();
       viewRef.current = null;
     };
@@ -1260,6 +1398,66 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
         .dark .ProseMirror p.is-editor-empty:first-child::before {
           color: #64748b;
+        }
+
+        /* Table styles */
+        .prosemirror-editor table {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 1.5em 0;
+          font-size: 0.875em;
+        }
+
+        .prosemirror-editor table td,
+        .prosemirror-editor table th {
+          border: 1px solid #e2e8f0;
+          padding: 0.5em 0.75em;
+          text-align: left;
+        }
+
+        .dark .prosemirror-editor table td,
+        .dark .prosemirror-editor table th {
+          border-color: #334155;
+        }
+
+        .prosemirror-editor table th {
+          font-weight: 600;
+          background-color: #f8fafc;
+        }
+
+        .dark .prosemirror-editor table th {
+          background-color: #1e293b;
+        }
+
+        .prosemirror-editor table tr:hover {
+          background-color: #f8fafc;
+        }
+
+        .dark .prosemirror-editor table tr:hover {
+          background-color: #1e293b;
+        }
+
+        /* Selected table cells */
+        .prosemirror-editor .selectedCell {
+          background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        .dark .prosemirror-editor .selectedCell {
+          background-color: rgba(59, 130, 246, 0.2);
+        }
+
+        /* Mermaid diagram styles */
+        .prosemirror-editor .mermaid-diagram {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          margin: 1.5em 0;
+          background: transparent;
+        }
+
+        .prosemirror-editor .mermaid-diagram svg {
+          max-width: 100%;
+          height: auto;
         }
       `}</style>
       {selectedImage && (
