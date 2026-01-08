@@ -49,6 +49,33 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
               dispatch({ changes: { from, to, insert: `*${text}*` }, selection: { anchor: from + 1 + text.length } });
               return true;
             }},
+            { key: "Mod-Shift-c", run: (view) => {
+              // Insert task list item
+              const { state, dispatch } = view;
+              const { from } = state.selection.main;
+              const line = state.doc.lineAt(from);
+              const lineText = line.text;
+
+              // Check if already a task list
+              if (/^\s*-\s*\[[ xX]\]/.test(lineText)) {
+                // Toggle checkbox
+                const newText = lineText.replace(/\[([ xX])\]/, (_, match) => {
+                  return match.toLowerCase() === 'x' ? '[ ]' : '[x]';
+                });
+                dispatch({
+                  changes: { from: line.from, to: line.to, insert: newText },
+                  selection: { anchor: from }
+                });
+              } else {
+                // Insert new task list item
+                const taskItem = '- [ ] ';
+                dispatch({
+                  changes: { from: line.from, insert: taskItem },
+                  selection: { anchor: line.from + taskItem.length }
+                });
+              }
+              return true;
+            }},
           ]),
           EditorView.domEventHandlers({
             paste: (event, view) => {
