@@ -1129,9 +1129,14 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     // Render Mermaid diagrams
     const renderMermaidDiagrams = async () => {
       // Prevent concurrent renders
-      if (isRenderingMermaidRef.current) return;
+      if (isRenderingMermaidRef.current) {
+        console.log('[Mermaid] Already rendering, skipping');
+        return;
+      }
 
       const codeBlocks = editorRef.current?.querySelectorAll('pre code[data-language="mermaid"]');
+      console.log('[Mermaid] Found code blocks:', codeBlocks?.length);
+
       if (!codeBlocks || codeBlocks.length === 0) return;
 
       isRenderingMermaidRef.current = true;
@@ -1142,10 +1147,14 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           if (!pre) continue;
 
           // Check if already rendered
-          if (pre.classList.contains('mermaid-diagram')) continue;
+          if (pre.classList.contains('mermaid-diagram')) {
+            console.log('[Mermaid] Already rendered, skipping');
+            continue;
+          }
 
           // Store original code before rendering
           const code = block.textContent || '';
+          console.log('[Mermaid] Code content:', code?.substring(0, 50));
           if (!code) continue;
 
           // Store original code in data attribute
@@ -1153,7 +1162,9 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
           try {
             const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            console.log('[Mermaid] Rendering diagram with id:', id);
             const { svg } = await mermaid.render(id, code);
+            console.log('[Mermaid] Rendered successfully');
 
             // Add hidden comment with original code before SVG
             const svgWithCode = `<!-- MERMAID_ORIGINAL_CODE:${encodeURIComponent(code)} -->${svg}`;
@@ -1161,7 +1172,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
             pre.innerHTML = svgWithCode;
             pre.classList.add('mermaid-diagram');
           } catch (error) {
-            console.error('Failed to render Mermaid diagram:', error);
+            console.error('[Mermaid] Failed to render diagram:', error);
             // Remove mermaid-diagram class if rendering failed
             pre.classList.remove('mermaid-diagram');
           }
@@ -1174,11 +1185,13 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     // Save render function to ref for use in transaction handler
     renderMermaidRef.current = renderMermaidDiagrams;
 
-    // Initial render
-    renderMermaidDiagrams();
-
     setIsReady(true);
     onEditorReady?.(view);
+
+    // Initial render - wait for DOM to be ready
+    setTimeout(() => {
+      renderMermaidDiagrams();
+    }, 100);
 
     return () => {
       if (updateTimeoutRef.current) {
