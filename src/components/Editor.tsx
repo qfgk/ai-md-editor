@@ -66,6 +66,8 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
 
                   // Show uploading indicator
                   const placeholder = `![Uploading...]()`;
+                  const placeholderStart = selection.from;
+
                   dispatch({
                     changes: {
                       from: selection.from,
@@ -95,32 +97,25 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
                     }
 
                     // Replace placeholder with actual image
-                    const currentText = state.sliceDoc(0, state.doc.length);
-                    const placeholderIndex = currentText.indexOf(placeholder);
-                    if (placeholderIndex !== -1) {
-                      dispatch({
-                        changes: {
-                          from: placeholderIndex,
-                          to: placeholderIndex + placeholder.length,
-                          insert: getImageMarkdown(imageUrl, file.name),
-                        },
-                        selection: { anchor: placeholderIndex + 2 },
-                        userEvent: "input.paste",
-                      });
-                    }
+                    // Use transaction to ensure atomic replacement
+                    view.dispatch({
+                      changes: {
+                        from: placeholderStart,
+                        to: placeholderStart + placeholder.length,
+                        insert: getImageMarkdown(imageUrl, file.name),
+                      },
+                      selection: { anchor: placeholderStart + 2 },
+                      userEvent: "input.paste",
+                    });
                   } catch (error) {
                     // Remove placeholder on error
-                    const currentText = state.sliceDoc(0, state.doc.length);
-                    const placeholderIndex = currentText.indexOf(placeholder);
-                    if (placeholderIndex !== -1) {
-                      dispatch({
-                        changes: {
-                          from: placeholderIndex,
-                          to: placeholderIndex + placeholder.length,
-                          insert: "",
-                        },
-                      });
-                    }
+                    view.dispatch({
+                      changes: {
+                        from: placeholderStart,
+                        to: placeholderStart + placeholder.length,
+                        insert: "",
+                      },
+                    });
                     toast.error(error instanceof Error ? error.message : "图片上传失败");
                   }
 
@@ -140,11 +135,11 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
                 const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
                 if (pos === null) return;
 
-                const { state, dispatch } = view;
-
                 // Show uploading indicator
                 const placeholder = `![Uploading...]()`;
-                dispatch({
+                const placeholderStart = pos;
+
+                view.dispatch({
                   changes: {
                     from: pos,
                     to: pos,
@@ -173,32 +168,24 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
                   }
 
                   // Replace placeholder with actual image
-                  const currentText = state.sliceDoc(0, state.doc.length);
-                  const placeholderIndex = currentText.indexOf(placeholder);
-                  if (placeholderIndex !== -1) {
-                    dispatch({
-                      changes: {
-                        from: placeholderIndex,
-                        to: placeholderIndex + placeholder.length,
-                        insert: getImageMarkdown(imageUrl, file.name),
-                      },
-                      selection: { anchor: placeholderIndex + 2 },
-                      userEvent: "input.drop",
-                    });
-                  }
+                  view.dispatch({
+                    changes: {
+                      from: placeholderStart,
+                      to: placeholderStart + placeholder.length,
+                      insert: getImageMarkdown(imageUrl, file.name),
+                    },
+                    selection: { anchor: placeholderStart + 2 },
+                    userEvent: "input.drop",
+                  });
                 } catch (error) {
                   // Remove placeholder on error
-                  const currentText = state.sliceDoc(0, state.doc.length);
-                  const placeholderIndex = currentText.indexOf(placeholder);
-                  if (placeholderIndex !== -1) {
-                    dispatch({
-                      changes: {
-                        from: placeholderIndex,
-                        to: placeholderIndex + placeholder.length,
-                        insert: "",
-                      },
-                    });
-                  }
+                  view.dispatch({
+                    changes: {
+                      from: placeholderStart,
+                      to: placeholderStart + placeholder.length,
+                      insert: "",
+                    },
+                  });
                   toast.error(error instanceof Error ? error.message : "图片上传失败");
                 }
 
