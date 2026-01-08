@@ -355,53 +355,59 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [markdown, activeFileNode]);
 
-  // Synchronized Scrolling
+  // Synchronized Scrolling (only for CodeMirror source mode)
   useEffect(() => {
     // Only sync scrolling in source mode with CodeMirror
-    if (!editorView || !previewRef.current || editorMode === 'wysiwyg') return;
-
-    // Check if it's a CodeMirror editor
-    if ('dom' in editorView) {
-      const editorScroller = (editorView as EditorView).scrollDOM;
-      const previewScroller = previewRef.current;
-
-      const handleEditorScroll = () => {
-        if (isScrollingRef.current) return;
-        isScrollingRef.current = true;
-
-        const ratio = editorScroller.scrollTop / (editorScroller.scrollHeight - editorScroller.clientHeight);
-        const previewScrollTop = ratio * (previewScroller.scrollHeight - previewScroller.clientHeight);
-
-        previewScroller.scrollTop = previewScrollTop;
-
-        // Reset flag after a short delay
-        setTimeout(() => { isScrollingRef.current = false; }, 50);
-      };
-
-      const handlePreviewScroll = () => {
-        if (isScrollingRef.current) return;
-        isScrollingRef.current = true;
-
-        const ratio = previewScroller.scrollTop / (previewScroller.scrollHeight - previewScroller.clientHeight);
-        const editorScrollTop = ratio * (editorScroller.scrollHeight - editorScroller.clientHeight);
-
-        editorScroller.scrollTop = editorScrollTop;
-
-        setTimeout(() => { isScrollingRef.current = false; }, 50);
-      };
-
-      editorScroller.addEventListener('scroll', handleEditorScroll);
-      previewScroller.addEventListener('scroll', handlePreviewScroll);
-
-      return () => {
-        editorScroller.removeEventListener('scroll', handleEditorScroll);
-        previewScroller.removeEventListener('scroll', handlePreviewScroll);
-      };
+    if (editorMode !== 'source' || !previewRef.current) {
+      return () => {};
     }
 
-    // If it's not a CodeMirror editor, return early with empty cleanup
-    return () => {};
-  }, [editorView, editorMode]);
+    // Double-check it's a CodeMirror editor before accessing scrollDOM
+    const editorViewTyped = editorView as any;
+    if (!editorView || !editorViewTyped.scrollDOM) {
+      return () => {};
+    }
+
+    const editorScroller = editorViewTyped.scrollDOM;
+    const previewScroller = previewRef.current;
+
+    const handleEditorScroll = () => {
+      if (isScrollingRef.current) return;
+      isScrollingRef.current = true;
+
+      const ratio = editorScroller.scrollTop / (editorScroller.scrollHeight - editorScroller.clientHeight);
+      const previewScrollTop = ratio * (previewScroller.scrollHeight - previewScroller.clientHeight);
+
+      previewScroller.scrollTop = previewScrollTop;
+
+      // Reset flag after a short delay
+      setTimeout(() => { isScrollingRef.current = false; }, 50);
+    };
+
+    const handlePreviewScroll = () => {
+      if (isScrollingRef.current) return;
+      isScrollingRef.current = true;
+
+      const ratio = previewScroller.scrollTop / (previewScroller.scrollHeight - previewScroller.clientHeight);
+      const editorScrollTop = ratio * (editorScroller.scrollHeight - editorScroller.clientHeight);
+
+      editorScroller.scrollTop = editorScrollTop;
+
+      setTimeout(() => { isScrollingRef.current = false; }, 50);
+    };
+
+    editorScroller.addEventListener('scroll', handleEditorScroll);
+    previewScroller.addEventListener('scroll', handlePreviewScroll);
+
+    return () => {
+      if (editorScroller) {
+        editorScroller.removeEventListener('scroll', handleEditorScroll);
+      }
+      if (previewScroller) {
+        previewScroller.removeEventListener('scroll', handlePreviewScroll);
+      }
+    };
+  }, [editorMode, editorView]);
 
   return (
     <div className="h-screen w-full flex flex-col bg-background text-foreground overflow-hidden">

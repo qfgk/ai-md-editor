@@ -431,6 +431,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const { theme } = useTheme();
   const { fontSize, defaultImageUploadProvider } = useSettings();
   const [isReady, setIsReady] = useState(false);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Enhanced Markdown to HTML parser with better support for syntax
   const markdownToHTML = useCallback((markdown: string): string => {
@@ -710,8 +711,14 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         view.updateState(newState);
 
         if (transaction.docChanged) {
-          const markdown = prosemirrorToMarkdown(view);
-          onChange(markdown);
+          // Debounce markdown updates to avoid excessive recalculations
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
+          }
+          updateTimeoutRef.current = setTimeout(() => {
+            const markdown = prosemirrorToMarkdown(view);
+            onChange(markdown);
+          }, 300); // 300ms debounce
         }
       },
       attributes: {
@@ -824,14 +831,20 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     onEditorReady?.(view);
 
     return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
       view.destroy();
       viewRef.current = null;
     };
   }, []);
 
-  // Update content when it changes externally
+  // Update content when it changes externally (with debounce to avoid conflicts)
   useEffect(() => {
     if (!isReady || !viewRef.current) return;
+
+    // Don't update if user is actively typing
+    if (updateTimeoutRef.current) return;
 
     const currentMarkdown = prosemirrorToMarkdown(viewRef.current);
     if (currentMarkdown !== content) {
