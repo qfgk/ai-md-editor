@@ -410,7 +410,7 @@ export default function Home() {
   }, [editorMode, editorView]);
 
   return (
-    <div className="h-screen w-full flex flex-col bg-background text-foreground overflow-hidden">
+    <div className="h-screen w-full flex flex-col bg-background text-foreground overflow-hidden animate-fade-in">
       {/* Top Navigation Bar */}
       <header className="h-14 border-b border-border bg-sidebar flex items-center justify-between px-4 shrink-0 z-50">
         <div className="flex items-center gap-4">
@@ -418,18 +418,10 @@ export default function Home() {
             <div className="w-8 h-8 rounded bg-primary/20 flex items-center justify-center text-primary">
               <FileText size={20} />
             </div>
-            MD 编辑器
+            Best AI MD
           </div>
           <div className="h-6 w-px bg-border mx-2" />
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setShowSidebar(!showSidebar)}
-            className={cn("text-muted-foreground", !showSidebar && "text-foreground")}
-          >
-            <PanelLeft size={18} />
-          </Button>
-          
+
           {/* File Operations Toolbar */}
           <div className="flex items-center gap-1 ml-2">
             <Button variant="ghost" size="sm" onClick={handleSave} className="gap-2 text-muted-foreground hover:text-foreground" title="保存更改 (Ctrl+S)">
@@ -537,7 +529,7 @@ export default function Home() {
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar (File Explorer) */}
         {showSidebar && (
-          <aside className="w-64 border-r border-border bg-sidebar flex flex-col shrink-0 transition-all duration-300">
+          <aside className="w-64 border-r border-border bg-sidebar flex flex-col shrink-0 animate-slide-in sidebar-transition">
             <div className="p-4 font-medium text-sm text-muted-foreground uppercase tracking-wider">
               资源管理器
             </div>
@@ -572,26 +564,16 @@ export default function Home() {
         )}
 
         {/* Editor & Preview Split View */}
-        <main className="flex-1 flex flex-col overflow-hidden relative">
+        <main className="flex-1 flex flex-col overflow-hidden relative panel-transition">
           <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-            <ResizablePanel defaultSize={50} minSize={20} className="bg-editor-bg flex flex-col">
+            <ResizablePanel defaultSize={50} minSize={20} className="bg-editor-bg flex flex-col panel-transition">
               <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-sidebar shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-muted-foreground">编辑器</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditorMode(editorMode === 'source' ? 'wysiwyg' : 'source')}
-                    className="gap-2 h-7 px-2 text-xs"
-                    title={editorMode === 'source' ? '切换到所见即所得编辑' : '切换到源代码编辑'}
-                  >
-                    {editorMode === 'source' ? <Eye size={14} /> : <Code size={14} />}
-                    {editorMode === 'source' ? '可视化编辑' : '源代码'}
-                  </Button>
                 </div>
                 {editorMode === 'source' && <Toolbar editorView={editorView as EditorView} />}
               </div>
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden relative">
                 {editorMode === 'source' ? (
                   <Editor
                     value={markdown}
@@ -605,6 +587,34 @@ export default function Home() {
                     onEditorReady={setEditorView}
                   />
                 )}
+
+                {/* Floating Control Buttons - Bottom Left (Typora style) */}
+                <div className="absolute bottom-4 left-4 flex flex-col gap-2 z-10">
+                  {/* Toggle Sidebar */}
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={() => setShowSidebar(!showSidebar)}
+                    className={cn(
+                      "h-9 w-9 rounded-full shadow-lg transition-all duration-200 hover:scale-110",
+                      showSidebar && "bg-primary text-primary-foreground"
+                    )}
+                    title={showSidebar ? "隐藏侧边栏" : "显示侧边栏"}
+                  >
+                    <PanelLeft size={18} />
+                  </Button>
+
+                  {/* Toggle Editor Mode */}
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={() => setEditorMode(editorMode === 'source' ? 'wysiwyg' : 'source')}
+                    className="h-9 w-9 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+                    title={editorMode === 'source' ? '切换到可视化编辑' : '切换到源代码编辑'}
+                  >
+                    {editorMode === 'source' ? <Eye size={18} /> : <Code size={18} />}
+                  </Button>
+                </div>
               </div>
             </ResizablePanel>
 
