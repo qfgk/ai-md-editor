@@ -571,96 +571,90 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
   // Enhanced ProseMirror to Markdown converter
   const prosemirrorToMarkdown = useCallback((view: EditorView): string => {
-    let markdown = "";
-    let inList = false;
-    let inTaskList = false;
+    const blocks: string[] = [];
+    let listLevel = 0;
 
-    view.state.doc.descendants((node, pos) => {
-      if (node.isBlock) {
-        const text = node.textContent;
+    view.state.doc.forEach((node, offset) => {
+      if (!node.isBlock) return;
 
-        switch (node.type.name) {
-          case "heading":
-            if (inList || inTaskList) {
-              inList = false;
-              inTaskList = false;
-            }
-            const level = "#".repeat(node.attrs.level);
-            markdown += `${level} ${text}\n\n`;
-            break;
-
-          case "paragraph":
-            if (inList || inTaskList) {
-              inList = false;
-              inTaskList = false;
-            }
-            if (text.trim()) {
-              markdown += `${text}\n\n`;
-            }
-            break;
-
-          case "blockquote":
-            if (inList || inTaskList) {
-              inList = false;
-              inTaskList = false;
-            }
-            markdown += `> ${text}\n\n`;
-            break;
-
-          case "code_block":
-            if (inList || inTaskList) {
-              inList = false;
-              inTaskList = false;
-            }
-            const lang = node.attrs.language ? node.attrs.language : '';
-            markdown += `\`\`\`${lang}\n${text}\n\`\`\`\n\n`;
-            break;
-
-          case "ordered_list":
-            if (!inList) {
-              inList = true;
-              markdown += `\n`;
-            }
-            node.forEach((li, offset) => {
-              markdown += `1. ${li.textContent}\n`;
-            });
-            markdown += `\n`;
-            break;
-
-          case "bullet_list":
-            if (!inList) {
-              inList = true;
-              markdown += `\n`;
-            }
-            node.forEach((li, offset) => {
-              markdown += `- ${li.textContent}\n`;
-            });
-            markdown += `\n`;
-            break;
-
-          case "task_list":
-            inTaskList = true;
-            markdown += `\n`;
-            node.forEach((taskItem) => {
-              const checked = taskItem.attrs.checked ? "[x]" : "[ ]";
-              const itemText = taskItem.textContent;
-              markdown += `- ${checked} ${itemText}\n`;
-            });
-            markdown += `\n`;
-            break;
-
-          case "horizontal_rule":
-            if (inList || inTaskList) {
-              inList = false;
-              inTaskList = false;
-            }
-            markdown += `---\n\n`;
-            break;
+      switch (node.type.name) {
+        case "heading": {
+          const level = "#".repeat(node.attrs.level);
+          const text = getNodeTextContent(node);
+          blocks.push(`${level} ${text}\n`);
+          listLevel = 0;
+          break;
         }
-      } else if (node.isInline && node.type.name !== "image") {
-        // Handle inline marks
-        let markedText = node.textContent || '';
-        node.marks?.forEach((mark) => {
+
+        case "paragraph": {
+          const text = getNodeTextContent(node);
+          if (text.trim()) {
+            blocks.push(`${text}\n`);
+          }
+          listLevel = 0;
+          break;
+        }
+
+        case "blockquote": {
+          const text = getNodeTextContent(node);
+          blocks.push(`> ${text}\n`);
+          listLevel = 0;
+          break;
+        }
+
+        case "code_block": {
+          const lang = node.attrs.language || '';
+          const text = node.textContent;
+          blocks.push(`\`\`\`${lang}\n${text}\n\`\`\`\n`);
+          listLevel = 0;
+          break;
+        }
+
+        case "ordered_list":
+          node.forEach((li) => {
+            const text = getNodeTextContent(li);
+            blocks.push(`1. ${text}\n`);
+          });
+          blocks.push("\n");
+          listLevel = 0;
+          break;
+
+        case "bullet_list":
+          node.forEach((li) => {
+            const text = getNodeTextContent(li);
+            blocks.push(`- ${text}\n`);
+          });
+          blocks.push("\n");
+          listLevel = 0;
+          break;
+
+        case "task_list":
+          node.forEach((taskItem) => {
+            const checked = taskItem.attrs.checked ? "[x]" : "[ ]";
+            const text = getNodeTextContent(taskItem);
+            blocks.push(`- ${checked} ${text}\n`);
+          });
+          blocks.push("\n");
+          listLevel = 0;
+          break;
+
+        case "horizontal_rule":
+          blocks.push(`---\n\n`);
+          listLevel = 0;
+          break;
+      }
+    });
+
+    return blocks.join('');
+  }, []);
+
+  // Helper function to get node text content with inline formatting
+  function getNodeTextContent(node: any): string {
+    let text = '';
+    node.forEach((child: any) => {
+      if (child.isText) {
+        let markedText = child.text;
+        child.marks?.forEach((mark: any) => {
           switch (mark.type.name) {
             case "strong":
               markedText = `**${markedText}**`;
@@ -676,20 +670,18 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
               break;
           }
         });
-
-        // Add the marked text if it's not already in the markdown
-        if (markedText && !markdown.endsWith(markedText)) {
-          markdown += markedText;
-        }
-      } else if (node.type.name === "image") {
-        const alt = node.attrs.alt || '';
-        const src = node.attrs.src;
-        markdown += `![${alt}](${src})`;
+        text += markedText;
+      } else if (child.type.name === "image") {
+        const alt = child.attrs.alt || '';
+        const src = child.attrs.src;
+        text += `![${alt}](${src})`;
+      } else if (child.isBlock) {
+        // Recursively handle nested blocks
+        text += getNodeTextContent(child);
       }
     });
-
-    return markdown;
-  }, []);
+    return text;
+  }
 
   // Initialize editor
   useEffect(() => {
