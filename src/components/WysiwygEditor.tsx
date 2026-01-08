@@ -434,6 +434,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMarkdownRef = useRef<string>(content);
   const isUpdatingRef = useRef(false);
+  const isExternalUpdateRef = useRef(false);
 
   // Enhanced Markdown to HTML parser with better support for syntax
   const markdownToHTML = useCallback((markdown: string): string => {
@@ -696,6 +697,12 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         view.updateState(newState);
 
         if (transaction.docChanged) {
+          // Skip onChange if this is an external update
+          if (isExternalUpdateRef.current) {
+            isExternalUpdateRef.current = false;
+            return;
+          }
+
           // Mark that user is editing
           isUpdatingRef.current = true;
 
@@ -822,6 +829,10 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     });
 
     viewRef.current = view;
+
+    // Initialize lastMarkdownRef to prevent duplicate updates on initial load
+    lastMarkdownRef.current = prosemirrorToMarkdown(view);
+
     setIsReady(true);
     onEditorReady?.(view);
 
@@ -843,11 +854,16 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
     const currentMarkdown = prosemirrorToMarkdown(viewRef.current);
     if (currentMarkdown !== content) {
+      // Mark this as an external update to prevent triggering onChange
+      isExternalUpdateRef.current = true;
+
       const doc = ProseMirrorDOMParser.fromSchema(schema).parse(
         new DOMParser().parseFromString(markdownToHTML(content), "text/html").body
       );
       const tr = viewRef.current.state.tr.replaceWith(0, viewRef.current.state.doc.content.size, doc.content);
       viewRef.current.dispatch(tr);
+
+      // Update lastMarkdownRef to match the new content
       lastMarkdownRef.current = content;
     }
   }, [content, isReady, markdownToHTML, prosemirrorToMarkdown]);
