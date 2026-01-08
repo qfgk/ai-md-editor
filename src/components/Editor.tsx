@@ -8,6 +8,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { EditorView, keymap } from "@codemirror/view";
 import { toast } from "sonner";
 import { uploadImage, uploadVideo, getImageMarkdown, getVideoHTML } from "@/lib/image-upload";
+import { htmlToMarkdown, getHTMLFromClipboard } from "@/lib/html-to-markdown";
 
 interface EditorProps {
   value: string;
@@ -79,6 +80,42 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
           ]),
           EditorView.domEventHandlers({
             paste: (event, view) => {
+              // First, check for HTML content (rich text from web browsers)
+              const htmlData = getHTMLFromClipboard(event);
+              if (htmlData) {
+                event.preventDefault();
+
+                try {
+                  // Convert HTML to Markdown
+                  const markdown = htmlToMarkdown(htmlData, {
+                    preserveFormatting: true,
+                    convertLinks: true,
+                    convertImages: true,
+                    convertLists: true,
+                    convertHeadings: true,
+                  });
+
+                  // Insert converted markdown
+                  const { state, dispatch } = view;
+                  const selection = state.selection.main;
+
+                  dispatch({
+                    changes: {
+                      from: selection.from,
+                      to: selection.to,
+                      insert: markdown,
+                    },
+                    userEvent: "input.paste",
+                  });
+
+                  return;
+                } catch (error) {
+                  console.error('Failed to convert HTML to Markdown:', error);
+                  // Fall through to default handling if conversion fails
+                }
+              }
+
+              // Then check for images/videos
               const items = event.clipboardData?.items;
               if (!items) return;
 

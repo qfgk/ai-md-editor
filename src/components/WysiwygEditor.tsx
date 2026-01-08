@@ -11,6 +11,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { toast } from "sonner";
 import { uploadImage, uploadVideo } from "@/lib/image-upload";
+import { htmlToMarkdown, getHTMLFromClipboard } from "@/lib/html-to-markdown";
 
 // Enhanced schema with fenced code blocks that support language parameter
 const schema = new Schema({
@@ -727,6 +728,39 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         class: `prosemirror-editor ${theme === "dark" ? "dark" : "light"}`,
       },
       handlePaste(view, event) {
+        // First, check for HTML content (rich text from web browsers)
+        const htmlData = getHTMLFromClipboard(event);
+        if (htmlData) {
+          event.preventDefault();
+
+          try {
+            // Convert HTML to Markdown
+            const markdown = htmlToMarkdown(htmlData, {
+              preserveFormatting: true,
+              convertLinks: true,
+              convertImages: true,
+              convertLists: true,
+              convertHeadings: true,
+            });
+
+            // Convert Markdown to ProseMirror document
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = markdownToHTML(markdown);
+            const doc = ProseMirrorDOMParser.fromSchema(schema).parse(tempDiv);
+
+            // Insert at cursor position
+            const { from } = view.state.selection;
+            const tr = view.state.tr.replaceWith(from, view.state.selection.to, doc.content);
+            view.dispatch(tr);
+
+            return true;
+          } catch (error) {
+            console.error('Failed to convert HTML to Markdown:', error);
+            // Fall through to default handling
+          }
+        }
+
+        // Then check for images/videos
         const items = event.clipboardData?.items;
         if (!items) return false;
 
