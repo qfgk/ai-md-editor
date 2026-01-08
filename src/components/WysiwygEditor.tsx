@@ -725,8 +725,10 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const prosemirrorToMarkdown = useCallback((view: EditorView): string => {
     const blocks: string[] = [];
 
-    view.state.doc.forEach((node) => {
+    view.state.doc.forEach((node, offset) => {
       if (!node.isBlock) return;
+
+      const nodePos = offset + 1; // Adjust for document start
 
       switch (node.type.name) {
         case "heading": {
@@ -752,7 +754,29 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
         case "code_block": {
           const lang = node.attrs.language || '';
-          const text = node.textContent;
+          // For mermaid diagrams, try to get the original code from DOM
+          let text = node.textContent;
+
+          // Check if this is a mermaid block and try to get original code
+          if (lang === 'mermaid' && text.trim() === '') {
+            // Try to get from data attribute
+            const dom = view.domAtPos(nodePos);
+            const preElement = dom.node?.parentElement;
+            if (preElement) {
+              const dataCode = preElement.getAttribute('data-original-code');
+              if (dataCode) {
+                text = dataCode;
+              } else {
+                // Try to extract from HTML comment
+                const html = preElement.innerHTML;
+                const commentMatch = html.match(/<!-- MERMAID_ORIGINAL_CODE:([^-]+) -->/);
+                if (commentMatch) {
+                  text = decodeURIComponent(commentMatch[1]);
+                }
+              }
+            }
+          }
+
           blocks.push(`\`\`\`${lang}\n${text}\n\`\`\`\n`);
           break;
         }
@@ -1106,14 +1130,29 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         const pre = block.parentElement;
         if (!pre) continue;
 
+        // Store original code before rendering
         const code = block.textContent || '';
+        if (!code) continue;
+
+        // Check if already rendered
+        if (pre.classList.contains('mermaid-diagram')) continue;
+
+        // Store original code in data attribute
+        pre.setAttribute('data-original-code', code);
+
         try {
           const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
           const { svg } = await mermaid.render(id, code);
-          pre.innerHTML = svg;
+
+          // Add hidden comment with original code before SVG
+          const svgWithCode = `<!-- MERMAID_ORIGINAL_CODE:${encodeURIComponent(code)} -->${svg}`;
+
+          pre.innerHTML = svgWithCode;
           pre.classList.add('mermaid-diagram');
         } catch (error) {
           console.error('Failed to render Mermaid diagram:', error);
+          // Remove mermaid-diagram class if rendering failed
+          pre.classList.remove('mermaid-diagram');
         }
       }
     };

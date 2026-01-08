@@ -1,9 +1,6 @@
 # MD Editor 使用说明
-
 欢迎使用 **MD Editor**，这是一个功能强大的在线 Markdown 编辑器，灵感来源于 `md.a2data.cn`。
-
 ## 主要功能
-
 ### 1. 编辑与预览
 - **实时预览**：左侧编辑，右侧实时渲染 HTML。
 - **左右分栏**：拖拽中间的分隔条调整宽度。
@@ -27,30 +24,24 @@
 ---
 
 ## 示例
-
 ### Mermaid 流程图
-
 ```mermaid
 graph TD
-    A[Start] --> B{Is it working?}
-    B -- Yes --> C[Great!]
-    B -- No --> D[Debug]
-    D --> B
+      A[Start] --> B{Is it working?}
+      B -- Yes --> C[Great!]
+      B -- No --> D[Debug]
+      D --> B
 ```
-
 ### 数学公式
-
 行内公式：$E=mc^2$
-
 块级公式：
-
 $$
 \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
 $$
-
 ### 表格
-
 | 功能 | 状态 |
+| --- | --- |
+| --- | --- |
 | :--- | :--- |
 | Markdown | ✅ |
 | Mermaid | ✅ |
