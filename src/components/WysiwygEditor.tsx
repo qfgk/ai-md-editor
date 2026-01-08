@@ -495,6 +495,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const lastMarkdownRef = useRef<string>(content);
   const isUpdatingRef = useRef(false);
   const isExternalUpdateRef = useRef(false);
+  const renderMermaidRef = useRef<(() => Promise<void>) | null>(null);
 
   // Enhanced Markdown to HTML parser with better support for syntax
   const markdownToHTML = useCallback((markdown: string): string => {
@@ -881,27 +882,31 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           // Skip onChange if this is an external update
           if (isExternalUpdateRef.current) {
             isExternalUpdateRef.current = false;
-            return;
-          }
+          } else {
+            // Mark that user is editing
+            isUpdatingRef.current = true;
 
-          // Mark that user is editing
-          isUpdatingRef.current = true;
-
-          // Debounce markdown updates to avoid excessive recalculations
-          if (updateTimeoutRef.current) {
-            clearTimeout(updateTimeoutRef.current);
-          }
-          updateTimeoutRef.current = setTimeout(() => {
-            const markdown = prosemirrorToMarkdown(view);
-
-            // Only call onChange if content actually changed
-            if (markdown !== lastMarkdownRef.current) {
-              lastMarkdownRef.current = markdown;
-              onChange(markdown);
+            // Debounce markdown updates to avoid excessive recalculations
+            if (updateTimeoutRef.current) {
+              clearTimeout(updateTimeoutRef.current);
             }
+            updateTimeoutRef.current = setTimeout(() => {
+              const markdown = prosemirrorToMarkdown(view);
 
-            isUpdatingRef.current = false;
-          }, 500); // Increased to 500ms for better performance
+              // Only call onChange if content actually changed
+              if (markdown !== lastMarkdownRef.current) {
+                lastMarkdownRef.current = markdown;
+                onChange(markdown);
+              }
+
+              isUpdatingRef.current = false;
+            }, 500); // Increased to 500ms for better performance
+          }
+
+          // Render Mermaid diagrams after document changes
+          setTimeout(() => {
+            renderMermaidRef.current?.();
+          }, 100);
         }
       },
       attributes: {
@@ -1095,7 +1100,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     // Render Mermaid diagrams
     const renderMermaidDiagrams = async () => {
       const codeBlocks = editorRef.current?.querySelectorAll('pre code[data-language="mermaid"]');
-      if (!codeBlocks) return;
+      if (!codeBlocks || codeBlocks.length === 0) return;
 
       for (const block of codeBlocks) {
         const pre = block.parentElement;
@@ -1103,7 +1108,8 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
         const code = block.textContent || '';
         try {
-          const { svg } = await mermaid.render('mermaid-' + Date.now() + Math.random(), code);
+          const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+          const { svg } = await mermaid.render(id, code);
           pre.innerHTML = svg;
           pre.classList.add('mermaid-diagram');
         } catch (error) {
@@ -1111,6 +1117,9 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         }
       }
     };
+
+    // Save render function to ref for use in transaction handler
+    renderMermaidRef.current = renderMermaidDiagrams;
 
     // Initial render
     renderMermaidDiagrams();
@@ -1160,6 +1169,11 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
       // Update lastMarkdownRef to match the new content
       lastMarkdownRef.current = content;
+
+      // Render Mermaid diagrams after external content update
+      setTimeout(() => {
+        renderMermaidRef.current?.();
+      }, 100);
     }
   }, [content, isReady, markdownToHTML, prosemirrorToMarkdown]);
 
