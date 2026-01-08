@@ -5,6 +5,8 @@ export class MinIOStorage implements ICloudStorage {
   private client: S3Client | null = null;
   private bucket: string;
   private endPoint: string;
+  private port: number;
+  private useSSL: boolean;
   private path: string;
   private imagePath: string;
 
@@ -20,6 +22,8 @@ export class MinIOStorage implements ICloudStorage {
   }) {
     this.bucket = config.bucket;
     this.endPoint = config.endPoint;
+    this.port = config.port;
+    this.useSSL = config.useSSL;
     this.path = config.path || '';
     this.imagePath = config.imagePath || 'images/';
 
@@ -60,9 +64,10 @@ export class MinIOStorage implements ICloudStorage {
 
       await this.client.send(command);
 
-      // 构建 MinIO 文件 URL
-      const protocol = this.endPoint.startsWith('https') ? 'https' : 'http';
-      const url = `${protocol}://${this.endPoint}/${this.bucket}/${fileName}`;
+      // 构建 MinIO 文件 URL (包含端口)
+      const protocol = this.useSSL ? 'https' : 'http';
+      const port = (this.port !== 80 && this.port !== 443) ? `:${this.port}` : '';
+      const url = `${protocol}://${this.endPoint}${port}/${this.bucket}/${fileName}`;
 
       return {
         id: fileName,
@@ -97,9 +102,10 @@ export class MinIOStorage implements ICloudStorage {
 
       await this.client.send(command);
 
-      // 构建访问URL
-      const protocol = this.endPoint.startsWith('https') ? 'https' : 'http';
-      const url = `${protocol}://${this.endPoint}/${this.bucket}/${fileName}`;
+      // 构建访问URL (包含端口)
+      const protocol = this.useSSL ? 'https' : 'http';
+      const port = (this.port !== 80 && this.port !== 443) ? `:${this.port}` : '';
+      const url = `${protocol}://${this.endPoint}${port}/${this.bucket}/${fileName}`;
 
       return url;
     } catch (error: any) {
@@ -202,8 +208,10 @@ export class MinIOStorage implements ICloudStorage {
 
       await this.client.send(command);
 
-      const protocol = this.endPoint.startsWith('https') ? 'https' : 'http';
-      const url = `${protocol}://${this.endPoint}/${this.bucket}/${fileId}`;
+      // 构建访问URL (包含端口)
+      const protocol = this.useSSL ? 'https' : 'http';
+      const port = (this.port !== 80 && this.port !== 443) ? `:${this.port}` : '';
+      const url = `${protocol}://${this.endPoint}${port}/${this.bucket}/${fileId}`;
 
       return {
         id: fileId,
