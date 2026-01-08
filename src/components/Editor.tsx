@@ -8,7 +8,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { EditorView, keymap } from "@codemirror/view";
 import { toast } from "sonner";
 import { uploadImage, uploadVideo, getImageMarkdown, getVideoHTML } from "@/lib/image-upload";
-import { htmlToMarkdown, getHTMLFromClipboard } from "@/lib/html-to-markdown";
+import { htmlToMarkdownAsync, getHTMLFromClipboard, downloadImageAsFile } from "@/lib/html-to-markdown";
 
 interface EditorProps {
   value: string;
@@ -85,34 +85,74 @@ export const Editor: React.FC<EditorProps> = ({ value, onChange, onEditorCreate 
               if (htmlData) {
                 event.preventDefault();
 
-                try {
-                  // Convert HTML to Markdown
-                  const markdown = htmlToMarkdown(htmlData, {
-                    preserveFormatting: true,
-                    convertLinks: true,
-                    convertImages: true,
-                    convertLists: true,
-                    convertHeadings: true,
-                  });
+                const { state, dispatch } = view;
+                const selection = state.selection.main;
+                const placeholderStart = selection.from;
 
-                  // Insert converted markdown
-                  const { state, dispatch } = view;
-                  const selection = state.selection.main;
+                // Show processing indicator
+                dispatch({
+                  changes: {
+                    from: selection.from,
+                    to: selection.to,
+                    insert: "Processing...",
+                  },
+                  userEvent: "input.paste",
+                });
 
-                  dispatch({
-                    changes: {
-                      from: selection.from,
-                      to: selection.to,
-                      insert: markdown,
-                    },
-                    userEvent: "input.paste",
-                  });
+                // Process asynchronously
+                (async () => {
+                  try {
+                    // Convert HTML to Markdown with image upload
+                    const markdown = await htmlToMarkdownAsync(htmlData, {
+                      preserveFormatting: true,
+                      convertLinks: true,
+                      convertImages: true,
+                      convertLists: true,
+                      convertHeadings: true,
+                      onImageFound: async (imageUrl) => {
+                        if (!defaultImageUploadProvider) {
+                          toast.info('建议配置云存储以自动上传图片');
+                          return imageUrl; // Return original URL if no provider
+                        }
 
-                  return;
-                } catch (error) {
-                  console.error('Failed to convert HTML to Markdown:', error);
-                  // Fall through to default handling if conversion fails
-                }
+                        try {
+                          toast.loading('正在下载并上传图片...', { id: 'image-upload' });
+                          const file = await downloadImageAsFile(imageUrl);
+                          const uploadedUrl = await uploadImage(file, defaultImageUploadProvider);
+                          toast.success('图片上传成功', { id: 'image-upload' });
+                          return uploadedUrl;
+                        } catch (error) {
+                          console.error('Failed to upload image:', error);
+                          toast.error('图片上传失败，使用原链接');
+                          return imageUrl; // Return original URL on error
+                        }
+                      },
+                    });
+
+                    // Replace placeholder with converted markdown
+                    view.dispatch({
+                      changes: {
+                        from: placeholderStart,
+                        to: placeholderStart + "Processing...".length,
+                        insert: markdown,
+                      },
+                      userEvent: "input.paste",
+                    });
+                  } catch (error) {
+                    console.error('Failed to convert HTML to Markdown:', error);
+                    // Remove placeholder on error
+                    view.dispatch({
+                      changes: {
+                        from: placeholderStart,
+                        to: placeholderStart + "Processing...".length,
+                        insert: "",
+                      },
+                    });
+                    toast.error('转换失败，请重试');
+                  }
+                })();
+
+                return;
               }
 
               // Then check for images/videos

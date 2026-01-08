@@ -11,7 +11,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { toast } from "sonner";
 import { uploadImage, uploadVideo } from "@/lib/image-upload";
-import { htmlToMarkdown, getHTMLFromClipboard } from "@/lib/html-to-markdown";
+import { htmlToMarkdownAsync, getHTMLFromClipboard, downloadImageAsFile } from "@/lib/html-to-markdown";
 
 // Enhanced schema with fenced code blocks that support language parameter
 const schema = new Schema({
@@ -733,31 +733,62 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         if (htmlData) {
           event.preventDefault();
 
-          try {
-            // Convert HTML to Markdown
-            const markdown = htmlToMarkdown(htmlData, {
-              preserveFormatting: true,
-              convertLinks: true,
-              convertImages: true,
-              convertLists: true,
-              convertHeadings: true,
-            });
+          const { from } = view.state.selection;
 
-            // Convert Markdown to ProseMirror document
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = markdownToHTML(markdown);
-            const doc = ProseMirrorDOMParser.fromSchema(schema).parse(tempDiv);
+          // Insert processing placeholder
+          const placeholderNode = schema.nodes.paragraph.create({}, view.state.schema.text('Processing...'));
+          const tr = view.state.tr.replaceWith(from, view.state.selection.to, placeholderNode);
+          view.dispatch(tr);
 
-            // Insert at cursor position
-            const { from } = view.state.selection;
-            const tr = view.state.tr.replaceWith(from, view.state.selection.to, doc.content);
-            view.dispatch(tr);
+          // Process asynchronously
+          (async () => {
+            try {
+              // Convert HTML to Markdown with image upload
+              const markdown = await htmlToMarkdownAsync(htmlData, {
+                preserveFormatting: true,
+                convertLinks: true,
+                convertImages: true,
+                convertLists: true,
+                convertHeadings: true,
+                onImageFound: async (imageUrl) => {
+                  if (!defaultImageUploadProvider) {
+                    toast.info('建议配置云存储以自动上传图片');
+                    return imageUrl;
+                  }
 
-            return true;
-          } catch (error) {
-            console.error('Failed to convert HTML to Markdown:', error);
-            // Fall through to default handling
-          }
+                  try {
+                    toast.loading('正在下载并上传图片...', { id: 'image-upload-wysiwyg' });
+                    const file = await downloadImageAsFile(imageUrl);
+                    const uploadedUrl = await uploadImage(file, defaultImageUploadProvider);
+                    toast.success('图片上传成功', { id: 'image-upload-wysiwyg' });
+                    return uploadedUrl;
+                  } catch (error) {
+                    console.error('Failed to upload image:', error);
+                    toast.error('图片上传失败，使用原链接');
+                    return imageUrl;
+                  }
+                },
+              });
+
+              // Convert Markdown to ProseMirror document
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = markdownToHTML(markdown);
+              const doc = ProseMirrorDOMParser.fromSchema(schema).parse(tempDiv);
+
+              // Replace placeholder with actual content
+              const newTr = view.state.tr.replaceWith(from, from + 1, doc.content);
+              view.dispatch(newTr);
+
+            } catch (error) {
+              console.error('Failed to convert HTML to Markdown:', error);
+              // Remove placeholder on error
+              const errorTr = view.state.tr.delete(from, from + 1);
+              view.dispatch(errorTr);
+              toast.error('转换失败，请重试');
+            }
+          })();
+
+          return true;
         }
 
         // Then check for images/videos

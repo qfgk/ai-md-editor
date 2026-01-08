@@ -14,10 +14,74 @@ interface ConversionOptions {
   convertLists?: boolean;
   // Preserve headings
   convertHeadings?: boolean;
+  // Callback to handle image uploads
+  onImageFound?: (imageUrl: string) => Promise<string>;
 }
 
 /**
- * Convert HTML string to Markdown
+ * Convert HTML string to Markdown (async version for image handling)
+ */
+export async function htmlToMarkdownAsync(
+  html: string,
+  options: ConversionOptions = {}
+): Promise<string> {
+  const {
+    preserveFormatting = true,
+    convertLinks = true,
+    convertImages = true,
+    convertLists = true,
+    convertHeadings = true,
+    onImageFound,
+  } = options;
+
+  // Create a temporary DOM element to parse HTML
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+
+  // Collect images to upload
+  const imagePromises: Promise<void>[] = [];
+  const imageMap = new Map<string, string>(); // original URL -> uploaded URL
+
+  if (onImageFound && convertImages) {
+    const images = tmp.querySelectorAll('img');
+    images.forEach((img) => {
+      const src = img.getAttribute('src');
+      if (src && src.startsWith('http')) {
+        const promise = (async () => {
+          try {
+            const uploadedUrl = await onImageFound(src);
+            imageMap.set(src, uploadedUrl);
+            img.setAttribute('src', uploadedUrl);
+            img.setAttribute('data-uploaded', 'true');
+          } catch (error) {
+            console.error('Failed to upload image:', error);
+            // Keep original URL if upload fails
+          }
+        })();
+        imagePromises.push(promise);
+      }
+    });
+
+    // Wait for all images to upload
+    await Promise.all(imagePromises);
+  }
+
+  // Now convert to markdown
+  let markdown = '';
+
+  // Process child nodes
+  tmp.childNodes.forEach((node) => {
+    markdown += processNode(node, options);
+  });
+
+  // Clean up multiple blank lines
+  markdown = markdown.replace(/\n{3,}/g, '\n\n');
+
+  return markdown.trim();
+}
+
+/**
+ * Convert HTML string to Markdown (sync version without image upload)
  */
 export function htmlToMarkdown(
   html: string,
@@ -278,4 +342,23 @@ export function getHTMLFromClipboard(event: ClipboardEvent): string | null {
 export function getTextFromClipboard(event: ClipboardEvent): string | null {
   const textData = event.clipboardData?.getData('text/plain');
   return textData || null;
+}
+
+/**
+ * Download image from URL and convert to File
+ */
+export async function downloadImageAsFile(imageUrl: string): Promise<File> {
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download image: ${response.statusText}`);
+  }
+
+  const blob = await response.blob();
+
+  // Extract filename from URL
+  const url = new URL(imageUrl);
+  const filename = url.pathname.split('/').pop() || 'image';
+  const extension = blob.type.split('/')[1] || 'png';
+
+  return new File([blob], `${filename}.${extension}`, { type: blob.type });
 }
