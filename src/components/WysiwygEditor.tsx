@@ -432,6 +432,8 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const { fontSize, defaultImageUploadProvider } = useSettings();
   const [isReady, setIsReady] = useState(false);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMarkdownRef = useRef<string>(content);
+  const isUpdatingRef = useRef(false);
 
   // Enhanced Markdown to HTML parser with better support for syntax
   const markdownToHTML = useCallback((markdown: string): string => {
@@ -569,12 +571,11 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     return div.innerHTML;
   }
 
-  // Enhanced ProseMirror to Markdown converter
+  // Enhanced ProseMirror to Markdown converter (optimized for performance)
   const prosemirrorToMarkdown = useCallback((view: EditorView): string => {
     const blocks: string[] = [];
-    let listLevel = 0;
 
-    view.state.doc.forEach((node, offset) => {
+    view.state.doc.forEach((node) => {
       if (!node.isBlock) return;
 
       switch (node.type.name) {
@@ -582,7 +583,6 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           const level = "#".repeat(node.attrs.level);
           const text = getNodeTextContent(node);
           blocks.push(`${level} ${text}\n`);
-          listLevel = 0;
           break;
         }
 
@@ -591,14 +591,12 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           if (text.trim()) {
             blocks.push(`${text}\n`);
           }
-          listLevel = 0;
           break;
         }
 
         case "blockquote": {
           const text = getNodeTextContent(node);
           blocks.push(`> ${text}\n`);
-          listLevel = 0;
           break;
         }
 
@@ -606,7 +604,6 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           const lang = node.attrs.language || '';
           const text = node.textContent;
           blocks.push(`\`\`\`${lang}\n${text}\n\`\`\`\n`);
-          listLevel = 0;
           break;
         }
 
@@ -616,7 +613,6 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
             blocks.push(`1. ${text}\n`);
           });
           blocks.push("\n");
-          listLevel = 0;
           break;
 
         case "bullet_list":
@@ -625,7 +621,6 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
             blocks.push(`- ${text}\n`);
           });
           blocks.push("\n");
-          listLevel = 0;
           break;
 
         case "task_list":
@@ -635,12 +630,10 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
             blocks.push(`- ${checked} ${text}\n`);
           });
           blocks.push("\n");
-          listLevel = 0;
           break;
 
         case "horizontal_rule":
           blocks.push(`---\n\n`);
-          listLevel = 0;
           break;
       }
     });
@@ -703,14 +696,24 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         view.updateState(newState);
 
         if (transaction.docChanged) {
+          // Mark that user is editing
+          isUpdatingRef.current = true;
+
           // Debounce markdown updates to avoid excessive recalculations
           if (updateTimeoutRef.current) {
             clearTimeout(updateTimeoutRef.current);
           }
           updateTimeoutRef.current = setTimeout(() => {
             const markdown = prosemirrorToMarkdown(view);
-            onChange(markdown);
-          }, 300); // 300ms debounce
+
+            // Only call onChange if content actually changed
+            if (markdown !== lastMarkdownRef.current) {
+              lastMarkdownRef.current = markdown;
+              onChange(markdown);
+            }
+
+            isUpdatingRef.current = false;
+          }, 500); // Increased to 500ms for better performance
         }
       },
       attributes: {
@@ -831,12 +834,12 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     };
   }, []);
 
-  // Update content when it changes externally (with debounce to avoid conflicts)
+  // Update content when it changes externally (optimized to avoid conflicts)
   useEffect(() => {
     if (!isReady || !viewRef.current) return;
 
-    // Don't update if user is actively typing
-    if (updateTimeoutRef.current) return;
+    // Don't update if user is actively typing or content is the same
+    if (isUpdatingRef.current || updateTimeoutRef.current) return;
 
     const currentMarkdown = prosemirrorToMarkdown(viewRef.current);
     if (currentMarkdown !== content) {
@@ -845,6 +848,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
       );
       const tr = viewRef.current.state.tr.replaceWith(0, viewRef.current.state.doc.content.size, doc.content);
       viewRef.current.dispatch(tr);
+      lastMarkdownRef.current = content;
     }
   }, [content, isReady, markdownToHTML, prosemirrorToMarkdown]);
 
