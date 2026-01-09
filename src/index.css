@@ -130,6 +130,12 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased selection:bg-primary/20 selection:text-primary;
     background-image: radial-gradient(var(--border) 1px, transparent 1px);

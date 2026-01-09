@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-import { Schema, DOMParser as ProseMirrorDOMParser } from "prosemirror-model";
+import { Schema, DOMParser as ProseMirrorDOMParser, Node as ProseMirrorNode } from "prosemirror-model";
 import { inputRules, wrappingInputRule, textblockTypeInputRule, InputRule } from "prosemirror-inputrules";
 import { keymap } from "prosemirror-keymap";
 import { history, undo, redo } from "prosemirror-history";
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { uploadImage, uploadVideo } from "@/lib/image-upload";
 import { htmlToMarkdownAsync, getHTMLFromClipboard, downloadImageAsFile } from "@/lib/html-to-markdown";
 import mermaid from "mermaid";
+import katex from "katex";
 
 // Initialize Mermaid
 mermaid.initialize({
@@ -477,6 +478,273 @@ const plugins = [
   tableEditing(),
 ];
 
+// Custom node view for code blocks with Mermaid rendering
+class CodeBlockNodeView {
+  dom: HTMLElement;
+  contentDOM: HTMLElement | null;
+  node: ProseMirrorNode;
+  private view: EditorView;
+  private getPos: () => number | undefined;
+  private isMermaid: boolean;
+  private rendered: boolean = false;
+  private rendering: boolean = false;
+  private isEditing: boolean = false;
+
+  constructor(node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) {
+    this.node = node;
+    this.view = view;
+    this.getPos = getPos;
+    this.isMermaid = node.attrs.language === 'mermaid';
+
+    // Create container element
+    this.dom = document.createElement('div');
+    this.dom.className = 'code-block-wrapper';
+
+    if (this.isMermaid) {
+      this.dom.className += ' mermaid-wrapper';
+      this.setupMermaidView();
+    } else {
+      // Use default code block rendering for non-mermaid blocks
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+      const lang = node.attrs.language || '';
+      if (lang) {
+        code.className = `language-${lang}`;
+        code.setAttribute('data-language', lang);
+      }
+      code.textContent = node.textContent;
+      pre.appendChild(code);
+      this.dom.appendChild(pre);
+      this.contentDOM = code; // Allow editing the code
+    }
+  }
+
+  private setupMermaidView() {
+    // Create preview container (for the rendered diagram)
+    const previewContainer = document.createElement('pre');
+    previewContainer.className = 'mermaid-diagram-container';
+    previewContainer.setAttribute('data-original-code', this.node.textContent);
+    previewContainer.style.cursor = 'pointer';
+    previewContainer.title = '点击编辑代码';
+
+    // Add click handler to enter edit mode
+    previewContainer.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.enterEditMode();
+    });
+
+    this.dom.appendChild(previewContainer);
+
+    // Create edit container (hidden by default)
+    const editContainer = document.createElement('div');
+    editContainer.className = 'mermaid-edit-container';
+    editContainer.style.display = 'none';
+
+    // Create textarea for editing
+    const editTextarea = document.createElement('textarea');
+    editTextarea.className = 'mermaid-code-editor';
+    editTextarea.value = this.node.textContent;
+    editTextarea.spellcheck = false;
+
+    // Create toolbar with buttons
+    const toolbar = document.createElement('div');
+    toolbar.className = 'mermaid-edit-toolbar';
+
+    const hint = document.createElement('span');
+    hint.className = 'mermaid-edit-hint';
+    hint.textContent = 'Ctrl+Enter 保存 · Esc 取消';
+
+    const buttons = document.createElement('div');
+    buttons.className = 'mermaid-edit-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'mermaid-edit-btn cancel';
+    cancelBtn.textContent = '取消';
+    cancelBtn.type = 'button';
+    cancelBtn.onclick = () => this.exitEditMode(false);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'mermaid-edit-btn save';
+    saveBtn.textContent = '保存';
+    saveBtn.type = 'button';
+    saveBtn.onclick = () => this.exitEditMode(true);
+
+    buttons.appendChild(cancelBtn);
+    buttons.appendChild(saveBtn);
+    toolbar.appendChild(hint);
+    toolbar.appendChild(buttons);
+
+    editContainer.appendChild(toolbar);
+    editContainer.appendChild(editTextarea);
+    this.dom.appendChild(editContainer);
+
+    // Handle keyboard shortcuts
+    editTextarea.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        this.exitEditMode(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this.exitEditMode(false);
+      }
+    });
+
+    // Auto-resize textarea
+    editTextarea.addEventListener('input', function(this: HTMLTextAreaElement) {
+      this.style.height = 'auto';
+      this.style.height = this.scrollHeight + 'px';
+    });
+
+    this.contentDOM = null; // We don't allow editing the rendered view
+
+    // Render the diagram
+    this.renderDiagram();
+  }
+
+  private enterEditMode() {
+    if (this.isEditing) return;
+
+    const editContainer = this.dom.querySelector('.mermaid-edit-container') as HTMLElement;
+    const previewContainer = this.dom.querySelector('.mermaid-diagram-container') as HTMLElement;
+    const editTextarea = this.dom.querySelector('.mermaid-code-editor') as HTMLTextAreaElement;
+
+    if (!editContainer || !previewContainer || !editTextarea) return;
+
+    this.isEditing = true;
+    editContainer.style.display = 'block';
+    previewContainer.style.display = 'none';
+
+    editTextarea.value = this.node.textContent;
+    editTextarea.style.height = 'auto';
+    editTextarea.style.height = editTextarea.scrollHeight + 'px';
+    editTextarea.focus();
+  }
+
+  private exitEditMode(save: boolean) {
+    if (!this.isEditing) return;
+
+    const editContainer = this.dom.querySelector('.mermaid-edit-container') as HTMLElement;
+    const previewContainer = this.dom.querySelector('.mermaid-diagram-container') as HTMLElement;
+    const editTextarea = this.dom.querySelector('.mermaid-code-editor') as HTMLTextAreaElement;
+
+    if (!editContainer || !previewContainer) return;
+
+    if (save && editTextarea && this.view.state) {
+      const newCode = editTextarea.value;
+      const pos = this.getPos();
+
+      if (pos !== undefined && newCode !== this.node.textContent) {
+        // Update the node's text content in the ProseMirror document
+        const tr = this.view.state.tr;
+        const nodeStart = pos;
+        const nodeEnd = pos + this.node.nodeSize;
+
+        // Create a new node with updated content
+        const newNode = this.node.type.create(
+          { language: 'mermaid' },
+          this.view.state.schema.text(newCode)
+        );
+
+        tr.replaceWith(nodeStart, nodeEnd, newNode);
+        this.view.dispatch(tr);
+
+        // Update local reference
+        this.node = newNode;
+        this.rendered = false;
+      }
+    }
+
+    this.isEditing = false;
+    editContainer.style.display = 'none';
+    previewContainer.style.display = '';
+  }
+
+  private async renderDiagram() {
+    if (!this.isMermaid || this.rendering || this.rendered) return;
+
+    this.rendering = true;
+
+    try {
+      const code = this.node.textContent;
+
+      // Re-query the preview container in case DOM was recreated
+      const previewContainer = this.dom.querySelector('.mermaid-diagram-container') as HTMLElement;
+      if (!previewContainer) {
+        console.warn('[Mermaid NodeView] Preview container not found, skipping render');
+        return;
+      }
+
+      const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+      console.log('[Mermaid NodeView] Rendering diagram:', id);
+
+      const { svg } = await mermaid.render(id, code);
+      console.log('[Mermaid NodeView] Rendered successfully');
+
+      // Replace preview container content with SVG
+      previewContainer.innerHTML = svg;
+      previewContainer.classList.add('mermaid-diagram');
+      this.rendered = true;
+    } catch (error) {
+      console.error('[Mermaid NodeView] Failed to render:', error);
+      // Keep original code if rendering fails
+      const previewContainer = this.dom.querySelector('.mermaid-diagram-container') as HTMLElement;
+      if (previewContainer) {
+        previewContainer.textContent = this.node.textContent;
+      }
+    } finally {
+      this.rendering = false;
+    }
+  }
+
+  update(node: ProseMirrorNode): boolean {
+    if (node.type !== this.node.type) return false;
+
+    const wasMermaid = this.isMermaid;
+    this.isMermaid = node.attrs.language === 'mermaid';
+
+    if (this.isMermaid) {
+      const contentChanged = node.textContent !== this.node.textContent;
+      this.node = node;
+
+      if (contentChanged && !this.isEditing) {
+        // Code content changed externally, re-render
+        this.rendered = false;
+        // Update the data-original-code attribute
+        const previewContainer = this.dom.querySelector('.mermaid-diagram-container') as HTMLElement;
+        if (previewContainer) {
+          previewContainer.setAttribute('data-original-code', node.textContent);
+        }
+        this.renderDiagram();
+      }
+
+      if (!this.isEditing) {
+        const editTextarea = this.dom.querySelector('.mermaid-code-editor') as HTMLTextAreaElement;
+        if (editTextarea) {
+          editTextarea.value = node.textContent;
+        }
+      }
+    } else if (!this.isMermaid && this.contentDOM) {
+      // Update code content for non-mermaid blocks
+      this.node = node;
+      if (this.contentDOM.textContent !== node.textContent) {
+        this.contentDOM.textContent = node.textContent;
+      }
+    } else {
+      this.node = node;
+    }
+
+    return true;
+  }
+
+  ignoreMutation(): boolean {
+    return this.isMermaid;
+  }
+
+  destroy() {
+    // Cleanup if needed
+  }
+}
+
 interface WysiwygEditorProps {
   content: string;
   onChange: (content: string) => void;
@@ -495,9 +763,6 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
   const lastMarkdownRef = useRef<string>(content);
   const isUpdatingRef = useRef(false);
   const isExternalUpdateRef = useRef(false);
-  const renderMermaidRef = useRef<(() => Promise<void>) | null>(null);
-  const isRenderingMermaidRef = useRef(false); // Prevent concurrent renders
-  const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Enhanced Markdown to HTML parser with better support for syntax
   const markdownToHTML = useCallback((markdown: string): string => {
@@ -511,9 +776,55 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     let inTable = false;
     let tableRows: string[] = [];
     let tableHeader: boolean = false;
+    let inMathBlock = false;
+    let mathBlockContent: string[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+
+      // Handle math blocks ($$...$$)
+      if (line.trim().startsWith('$$') && !inCodeBlock) {
+        if (!inMathBlock) {
+          // Start math block
+          inMathBlock = true;
+          mathBlockContent = [];
+          // Check if the closing $$ is on the same line
+          const match = line.match(/^\$\$(.+)\$\$$/);
+          if (match) {
+            // Inline math block on single line
+            try {
+              const html = katex.renderToString(match[1].trim(), { displayMode: true, throwOnError: false, strict: 'ignore' });
+              result.push(`<div class="katex-block">${html}</div>`);
+              inMathBlock = false;
+              mathBlockContent = [];
+            } catch (e) {
+              console.error('[KaTeX] Failed to render inline block:', e);
+              result.push(`<p>${escapeHtml(line)}</p>`);
+              inMathBlock = false;
+              mathBlockContent = [];
+            }
+          }
+          continue;
+        } else {
+          // End math block
+          try {
+            const mathContent = mathBlockContent.join('\n').trim();
+            const html = katex.renderToString(mathContent, { displayMode: true, throwOnError: false, strict: 'ignore' });
+            result.push(`<div class="katex-block">${html}</div>`);
+          } catch (e) {
+            console.error('[KaTeX] Failed to render block:', e);
+            result.push(`<pre>${escapeHtml('$$\n' + mathBlockContent.join('\n') + '\n$$')}</pre>`);
+          }
+          inMathBlock = false;
+          mathBlockContent = [];
+          continue;
+        }
+      }
+
+      if (inMathBlock) {
+        mathBlockContent.push(line);
+        continue;
+      }
 
       // Handle code blocks
       if (line.trim().startsWith('```')) {
@@ -651,10 +962,46 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     }
 
     return result.join('\n');
-  }, []);
+  }, [katex]);
 
   // Helper function to parse inline markdown
   function parseInlineMarkdown(text: string): string {
+    // First, handle inline math $...$
+    const parts: string[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    // Match inline math $...$ (but not $$...$$)
+    const inlineMathRegex = /\$([^$\n]+?)\$/g;
+
+    while ((match = inlineMathRegex.exec(text)) !== null) {
+      // Add text before the math
+      if (match.index > lastIndex) {
+        parts.push(parseInlineMarkdownWithoutMath(text.substring(lastIndex, match.index)));
+      }
+
+      // Add the rendered math
+      try {
+        const html = katex.renderToString(match[1].trim(), { displayMode: false, throwOnError: false, strict: 'ignore' });
+        parts.push(`<span class="katex-inline">${html}</span>`);
+      } catch (e) {
+        console.error('[KaTeX] Failed to render inline:', e);
+        parts.push(`$${match[1]}$`);
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(parseInlineMarkdownWithoutMath(text.substring(lastIndex)));
+    }
+
+    return parts.length > 0 ? parts.join('') : parseInlineMarkdownWithoutMath(text);
+  }
+
+  // Helper function to parse inline markdown without math (to avoid conflicts)
+  function parseInlineMarkdownWithoutMath(text: string): string {
     return text
       .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -756,29 +1103,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
         case "code_block": {
           const lang = node.attrs.language || '';
-          // For mermaid diagrams, try to get the original code from DOM
-          let text = node.textContent;
-
-          // Check if this is a mermaid block and try to get original code
-          if (lang === 'mermaid' && text.trim() === '') {
-            // Try to get from data attribute
-            const dom = view.domAtPos(nodePos);
-            const preElement = dom.node?.parentElement;
-            if (preElement) {
-              const dataCode = preElement.getAttribute('data-original-code');
-              if (dataCode) {
-                text = dataCode;
-              } else {
-                // Try to extract from HTML comment
-                const html = preElement.innerHTML;
-                const commentMatch = html.match(/<!-- MERMAID_ORIGINAL_CODE:([^-]+) -->/);
-                if (commentMatch) {
-                  text = decodeURIComponent(commentMatch[1]);
-                }
-              }
-            }
-          }
-
+          const text = node.textContent;
           blocks.push(`\`\`\`${lang}\n${text}\n\`\`\`\n`);
           break;
         }
@@ -928,15 +1253,13 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
               isUpdatingRef.current = false;
             }, 500); // Increased to 500ms for better performance
           }
-
-          // Debounce Mermaid rendering to prevent performance issues
-          if (renderTimeoutRef.current) {
-            clearTimeout(renderTimeoutRef.current);
-          }
-          renderTimeoutRef.current = setTimeout(() => {
-            renderMermaidRef.current?.();
-          }, 300);
         }
+      },
+      nodeViews: {
+        code_block(node, view, getPos) {
+          // Use custom node view for all code blocks
+          return new CodeBlockNodeView(node, view, getPos);
+        },
       },
       attributes: {
         class: `prosemirror-editor ${theme === "dark" ? "dark" : "light"}`,
@@ -1126,79 +1449,12 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
     // Initialize lastMarkdownRef to prevent duplicate updates on initial load
     lastMarkdownRef.current = prosemirrorToMarkdown(view);
 
-    // Render Mermaid diagrams
-    const renderMermaidDiagrams = async () => {
-      // Prevent concurrent renders
-      if (isRenderingMermaidRef.current) {
-        console.log('[Mermaid] Already rendering, skipping');
-        return;
-      }
-
-      const codeBlocks = editorRef.current?.querySelectorAll('pre code[data-language="mermaid"]');
-      console.log('[Mermaid] Found code blocks:', codeBlocks?.length);
-
-      if (!codeBlocks || codeBlocks.length === 0) return;
-
-      isRenderingMermaidRef.current = true;
-
-      try {
-        for (const block of codeBlocks) {
-          const pre = block.parentElement;
-          if (!pre) continue;
-
-          // Check if already rendered
-          if (pre.classList.contains('mermaid-diagram')) {
-            console.log('[Mermaid] Already rendered, skipping');
-            continue;
-          }
-
-          // Store original code before rendering
-          const code = block.textContent || '';
-          console.log('[Mermaid] Code content:', code?.substring(0, 50));
-          if (!code) continue;
-
-          // Store original code in data attribute
-          pre.setAttribute('data-original-code', code);
-
-          try {
-            const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-            console.log('[Mermaid] Rendering diagram with id:', id);
-            const { svg } = await mermaid.render(id, code);
-            console.log('[Mermaid] Rendered successfully');
-
-            // Add hidden comment with original code before SVG
-            const svgWithCode = `<!-- MERMAID_ORIGINAL_CODE:${encodeURIComponent(code)} -->${svg}`;
-
-            pre.innerHTML = svgWithCode;
-            pre.classList.add('mermaid-diagram');
-          } catch (error) {
-            console.error('[Mermaid] Failed to render diagram:', error);
-            // Remove mermaid-diagram class if rendering failed
-            pre.classList.remove('mermaid-diagram');
-          }
-        }
-      } finally {
-        isRenderingMermaidRef.current = false;
-      }
-    };
-
-    // Save render function to ref for use in transaction handler
-    renderMermaidRef.current = renderMermaidDiagrams;
-
     setIsReady(true);
     onEditorReady?.(view);
-
-    // Initial render - wait for DOM to be ready
-    setTimeout(() => {
-      renderMermaidDiagrams();
-    }, 100);
 
     return () => {
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
-      }
-      if (renderTimeoutRef.current) {
-        clearTimeout(renderTimeoutRef.current);
       }
       view.destroy();
       viewRef.current = null;
@@ -1225,14 +1481,6 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
 
       // Update lastMarkdownRef to match the new content
       lastMarkdownRef.current = content;
-
-      // Render Mermaid diagrams after external content update (debounced)
-      if (renderTimeoutRef.current) {
-        clearTimeout(renderTimeoutRef.current);
-      }
-      renderTimeoutRef.current = setTimeout(() => {
-        renderMermaidRef.current?.();
-      }, 300);
     }
   }, [content, isReady, markdownToHTML, prosemirrorToMarkdown]);
 
@@ -1245,6 +1493,7 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
           line-height: 1.6;
           min-height: 100%;
+          height: 100%;
           white-space: pre-wrap; /* Fix ProseMirror warning */
         }
 
@@ -1521,17 +1770,144 @@ export const WysiwygEditor: React.FC<WysiwygEditorProps> = ({ content, onChange,
         }
 
         /* Mermaid diagram styles */
-        .prosemirror-editor .mermaid-diagram {
+        .prosemirror-editor .code-block-wrapper {
+          margin: 1.5em 0;
+        }
+
+        .prosemirror-editor .code-block-wrapper pre.mermaid-diagram-container {
           display: flex;
           justify-content: center;
           align-items: center;
-          margin: 1.5em 0;
           background: transparent;
+          overflow-x: auto;
+          font-size: 0.875em;
+          line-height: 1.7142857;
+          border-radius: 0.375rem;
+          padding: 0.8571429em 1.1428571em;
+          margin: 0;
         }
 
-        .prosemirror-editor .mermaid-diagram svg {
+        .prosemirror-editor .code-block-wrapper pre.mermaid-diagram-container.mermaid-diagram {
+          padding: 0;
+        }
+
+        .prosemirror-editor .code-block-wrapper pre.mermaid-diagram-container svg {
           max-width: 100%;
           height: auto;
+          display: block;
+        }
+
+        /* Mermaid edit container */
+        .prosemirror-editor .mermaid-edit-container {
+          background-color: #1e293b;
+          border: 1px solid #334155;
+          border-radius: 0.375rem;
+          padding: 0.8571429em 1.1428571em;
+          margin: 1.5em 0;
+        }
+
+        .dark .prosemirror-editor .mermaid-edit-container {
+          background-color: #1e293b;
+          border-color: #334155;
+        }
+
+        /* Mermaid edit toolbar */
+        .prosemirror-editor .mermaid-edit-toolbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.8571429em;
+          padding-bottom: 0.8571429em;
+          border-bottom: 1px solid #334155;
+        }
+
+        .prosemirror-editor .mermaid-edit-hint {
+          font-size: 0.75rem;
+          color: #94a3b8;
+        }
+
+        /* Mermaid edit buttons */
+        .prosemirror-editor .mermaid-edit-buttons {
+          display: flex;
+          gap: 0.5rem;
+        }
+
+        .prosemirror-editor .mermaid-edit-btn {
+          padding: 0.375rem 0.75rem;
+          font-size: 0.875rem;
+          font-weight: 500;
+          border-radius: 0.25rem;
+          cursor: pointer;
+          transition: all 0.2s;
+          border: 1px solid transparent;
+        }
+
+        .prosemirror-editor .mermaid-edit-btn.cancel {
+          background-color: transparent;
+          color: #94a3b8;
+          border-color: #334155;
+        }
+
+        .prosemirror-editor .mermaid-edit-btn.cancel:hover {
+          background-color: #334155;
+          color: #e2e8f0;
+        }
+
+        .prosemirror-editor .mermaid-edit-btn.save {
+          background-color: #3b82f6;
+          color: white;
+        }
+
+        .prosemirror-editor .mermaid-edit-btn.save:hover {
+          background-color: #2563eb;
+        }
+
+        /* Mermaid code editor */
+        .prosemirror-editor .mermaid-code-editor {
+          width: 100%;
+          min-height: 150px;
+          max-height: 500px;
+          padding: 0.8571429em;
+          font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+          font-size: 0.875em;
+          line-height: 1.5;
+          background-color: #0f172a;
+          color: #e2e8f0;
+          border: 1px solid #334155;
+          border-radius: 0.25rem;
+          resize: vertical;
+          outline: none;
+        }
+
+        .dark .prosemirror-editor .mermaid-code-editor {
+          background-color: #0f172a;
+          border-color: #334155;
+        }
+
+        .prosemirror-editor .mermaid-code-editor:focus {
+          border-color: #3b82f6;
+        }
+
+        /* KaTeX math styles */
+        .prosemirror-editor .katex-inline {
+          display: inline-block;
+          margin: 0 2px;
+        }
+
+        .prosemirror-editor .katex-block {
+          display: block;
+          margin: 1.5em 0;
+          text-align: center;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
+
+        .prosemirror-editor .katex {
+          font-size: 1em;
+        }
+
+        .prosemirror-editor .katex-display {
+          margin: 0;
         }
       `}</style>
       {selectedImage && (
